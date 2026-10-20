@@ -2,6 +2,7 @@ package wiredoc
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/branchkit/branchkit-plugin-browser/wire"
@@ -20,7 +21,8 @@ func TestWireMarkdownIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != want {
+	// A Windows checkout may hold the file with CRLF line endings.
+	if strings.ReplaceAll(string(got), "\r\n", "\n") != want {
 		t.Fatal("WIRE.md is out of date: cd src && go run ./cmd/wiregen -md -o ../WIRE.md")
 	}
 }
