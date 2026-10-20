@@ -59,8 +59,9 @@ extension, so any other one is connected by the person who installed it.
    confirm in its own window, then writes the id into the browsers'
    native-messaging host manifests. Switching it off or removing it there
    takes the id out and restarts the plugin, which changes its token and
-   ends any connection the extension holds; an id another plugin also names
-   pairs with neither.
+   ends any connection the extension holds. An id another plugin also names
+   pairs with neither until you choose one of the two on either plugin's
+   card.
 2. **Ask the pairing host.** Declare the `nativeMessaging` permission and send
    one message: `chrome.runtime.sendNativeMessage("com.branchkit.pairing",
    {v: 1}, reply => …)` (`browser.runtime.sendNativeMessage` in Firefox). The
