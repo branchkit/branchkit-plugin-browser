@@ -57,8 +57,10 @@ extension, so any other one is connected by the person who installed it.
    `chrome://extensions` (developer mode on); Firefox on `about:debugging`
    (the add-on's `browser_specific_settings.gecko.id`). BranchKit asks you to
    confirm in its own window, then writes the id into the browsers'
-   native-messaging host manifests. Switch it off or remove it there to stop
-   it pairing; an id another plugin also names pairs with neither.
+   native-messaging host manifests. Switching it off or removing it there
+   takes the id out and restarts the plugin, which changes its token and
+   ends any connection the extension holds; an id another plugin also names
+   pairs with neither.
 2. **Ask the pairing host.** Declare the `nativeMessaging` permission and send
    one message: `chrome.runtime.sendNativeMessage("com.branchkit.pairing",
    {v: 1}, reply => …)` (`browser.runtime.sendNativeMessage` in Firefox). The
