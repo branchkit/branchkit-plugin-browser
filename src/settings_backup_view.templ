@@ -1,0 +1,119 @@
+package main
+
+import "strconv"
+import "github.com/branchkit/plugin-sdk-go"
+import "github.com/branchkit/plugin-sdk-go/ui"
+
+// The Backup tab (settings_backup_view.go). Read-only: one card per browser
+// family, and the one verb is a download. Every value is text the extension
+// sent, so it only ever appears as escaped text — no attribute here builds
+// markup or script from it.
+//
+// Built from the documented settings components only (bk-cards, bk-card,
+// bk-table, .label/.value/.mono/.dim, .badge): .status-row, page-* and diag-*
+// are the platform pages' own and can change under a plugin tab.
+templ BrowserBackup(data BackupSettingsData) {
+	<p class="dim bb-lede">
+		A copy of the browser extension's settings, kept by BranchKit so they survive
+		removing and reinstalling the extension. A fresh install offers to restore it.
+		This page shows the copy; it never changes it.
+	</p>
+	if data.Error != "" {
+		<p class="bb-error" role="alert">{ data.Error }</p>
+	}
+	<bk-cards>
+		for _, s := range data.Slots {
+			@backupSlotCard(s)
+		}
+	</bk-cards>
+}
+
+templ backupSlotCard(s BackupSlotView) {
+	<bk-card label={ s.Label } full>
+		if s.Found {
+			<button
+				slot="verb"
+				type="button"
+				class="small"
+				data-on:click={ branchkit.MethodPost("download_settings_backup", ui.Args("browser", s.Browser)) }
+			>Download backup file</button>
+			<bk-table columns="10rem minmax(0, 1fr)">
+				<div class="settings-row">
+					<div class="label">Last backed up</div>
+					<div class="value">{ s.SavedAt }</div>
+				</div>
+				if s.Unreadable {
+					<div class="settings-row">
+						<div class="label">Holds</div>
+						<div class="value">A document this version cannot read. The download still has it as stored.</div>
+					</div>
+				} else {
+					<div class="settings-row">
+						<div class="label">Extension version</div>
+						<div class="value mono">{ s.ExtensionVersion }</div>
+					</div>
+					<div class="settings-row">
+						<div class="label">Holds</div>
+						<div class="value">{ s.Summary }</div>
+					</div>
+				}
+			</bk-table>
+			if len(s.Rules) > 0 {
+				<details class="bb-rules">
+					<summary>{ "Domain rules (" + strconv.Itoa(len(s.Rules)) + ")" }</summary>
+					<bk-table columns="minmax(0, 1fr) minmax(0, 2fr)">
+						<div class="table-header">
+							<div>Site</div>
+							<div>What it does there</div>
+						</div>
+						for _, r := range s.Rules {
+							@backupRuleRow(r)
+						}
+					</bk-table>
+				</details>
+			}
+			if s.ExportStatus != "" {
+				<p class="dim bb-export" role="status">{ s.ExportStatus }</p>
+			}
+		} else {
+			<p class="dim bb-empty">No backup yet — the extension sends one a few seconds after any settings change while connected.</p>
+		}
+	</bk-card>
+}
+
+templ backupRuleRow(r BackupRuleView) {
+	<div class="settings-row">
+		<div>
+			<span class="label mono bb-pattern">{ r.Pattern }</span>
+			if r.Off {
+				<span class="badge badge-meta">Off</span>
+			}
+			if r.BadgeSize != "" {
+				<div class="bh-note">{ r.BadgeSize }</div>
+			}
+		</div>
+		<div>
+			if len(r.Entries) == 0 {
+				<span class="value">No entries</span>
+			} else {
+				<ul class="bb-entries">
+					for _, e := range r.Entries {
+						<li>
+							<span class="badge badge-meta" title={ e.Does }>{ e.Kind }</span>
+							<code>{ e.Matcher }</code>
+							if e.Detail != "" {
+								<span class="value">{ e.Detail }</span>
+							}
+							if e.Note != "" {
+								<span class="value">— { e.Note }</span>
+							}
+							if e.Off {
+								<span class="value">(off)</span>
+							}
+						</li>
+					}
+				</ul>
+			}
+		</div>
+	</div>
+}

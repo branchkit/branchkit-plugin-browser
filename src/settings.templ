@@ -1,0 +1,75 @@
+package main
+
+import "github.com/branchkit/plugin-sdk-go"
+
+type BrowserSettingsData struct {
+	IsLetter bool
+	IsWord   bool
+	IsExpand bool
+	// The first two codewords of the user's own alphabet, for the samples.
+	// Empty until the alphabet has loaded; the samples are then left out
+	// rather than showing words the user does not say.
+	WordA string
+	WordB string
+}
+
+// pressed is aria-pressed for a segment: the chosen one says so to a screen
+// reader, and settings-components.css fills it from the same attribute.
+func pressed(on bool) string {
+	if on {
+		return "true"
+	}
+	return "false"
+}
+
+// hintBtnClass marks which of the three hint-display buttons is the current
+// one. The look of both states lives in settings.css; this only says which.
+func hintBtnClass(active bool) string {
+	if active {
+		return "is-active"
+	}
+	return ""
+}
+
+templ BrowserSettings(data BrowserSettingsData) {
+	<bk-table columns="1fr 1fr">
+		<div class="table-header">
+			<div>Setting</div>
+			<div class="align-right">Value</div>
+		</div>
+		<div class="settings-row">
+			<div class="label">
+				Hint badges
+				<div class="bh-note">What the badge on each link and button of a page shows.</div>
+			</div>
+			// Each choice names itself and shows a sample drawn from the user's own
+			// alphabet. They were bare samples ("A", "arch", "arch s") with no
+			// label, no description, and a codeword from an older alphabet.
+			<div class="value-cell" role="group" aria-label="Hint badges">
+				<button type="button" aria-pressed={ pressed(data.IsLetter) }
+					class={ "segmented-btn " + hintBtnClass(data.IsLetter) }
+					data-on:click={ branchkit.MethodPost("set_hint_display", "{hint_display: 'letter'}") }
+				>Letters <span class="bh-sample">AB</span></button>
+				<button type="button" aria-pressed={ pressed(data.IsWord) }
+					class={ "segmented-btn " + hintBtnClass(data.IsWord) }
+					data-on:click={ branchkit.MethodPost("set_hint_display", "{hint_display: 'word'}") }
+				>
+					Words
+					if data.WordA != "" {
+						<span class="bh-sample">{ data.WordA + " " + data.WordB }</span>
+					}
+				</button>
+				<button type="button" aria-pressed={ pressed(data.IsExpand) }
+					class={ "segmented-btn " + hintBtnClass(data.IsExpand) }
+					title="The first word and the next letter; the rest appears as you say it"
+					data-on:click={ branchkit.MethodPost("set_hint_display", "{hint_display: 'expand'}") }
+				>
+					Word, then letter
+					if data.WordA != "" {
+						<span class="bh-sample">{ data.WordA + " b" }</span>
+					}
+				</button>
+			</div>
+		</div>
+	</bk-table>
+}

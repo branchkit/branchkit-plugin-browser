@@ -1,0 +1,513 @@
+{
+  "$schema": "https://branchkit.dev/schemas/manifest.json",
+  "id": "browser",
+  "name": "Browser",
+  "icon": "globe",
+  "version": "1.0.0",
+  "min_api_version": "0.2.0",
+  "description": "Bridge between BranchKit and browser extensions. Routes voice commands to page elements.",
+  "author": "BranchKit",
+  "publisher": "github:branchkit",
+  "dev": {
+    "build": [
+      [
+        "templ",
+        "generate"
+      ],
+      [
+        "go",
+        "build",
+        "-ldflags=-s -w",
+        "-o",
+        "../browser-plugin",
+        "."
+      ]
+    ],
+    "build_dir": "src"
+  },
+  "run": "./browser-plugin",
+  "action_prefix": "browser",
+  "action_types": {
+    "click": {
+      "label": "Click Element",
+      "fields": [
+        {
+          "key": "id",
+          "label": "Registry ID",
+          "placeholder": "42",
+          "required": true
+        },
+        {
+          "key": "frame_id",
+          "label": "Frame ID",
+          "placeholder": "0"
+        },
+        {
+          "key": "letter",
+          "label": "Hint Letter",
+          "placeholder": "a"
+        }
+      ]
+    },
+    "set_value": {
+      "label": "Set Field Value",
+      "fields": [
+        {
+          "key": "id",
+          "label": "Registry ID",
+          "placeholder": "42",
+          "required": true
+        },
+        {
+          "key": "frame_id",
+          "label": "Frame ID",
+          "placeholder": "0"
+        },
+        {
+          "key": "letter",
+          "label": "Hint Letter",
+          "placeholder": "a"
+        }
+      ]
+    },
+    "noop": {
+      "label": "No-op (Prefix Placeholder)",
+      "fields": []
+    },
+    "hide_hints": {
+      "label": "Hide Hints",
+      "fields": []
+    },
+    "history_back": {
+      "label": "Go Back (Browser History)",
+      "fields": []
+    },
+    "history_forward": {
+      "label": "Go Forward (Browser History)",
+      "fields": []
+    },
+    "refresh": {
+      "label": "Reload Page",
+      "fields": []
+    },
+    "tab_to_desk": {
+      "label": "Move Tab to Desktop",
+      "fields": [
+        {
+          "key": "desk",
+          "label": "Desktop Number",
+          "placeholder": "1",
+          "field_type": "string",
+          "required": true
+        },
+        {
+          "key": "follow",
+          "label": "Follow the Tab",
+          "field_type": "boolean",
+          "required": false
+        }
+      ]
+    },
+    "tab_to_window": {
+      "label": "Move Tab to Window",
+      "fields": [
+        {
+          "key": "index",
+          "label": "Window Index",
+          "placeholder": "1",
+          "field_type": "string",
+          "required": true
+        }
+      ]
+    }
+  },
+  "dispatch_via": "direct",
+  "requires": {
+    "privileges": [
+      "apps",
+      "windows",
+      "dispatch",
+      "locale"
+    ],
+    "network": "localhost",
+    "sockets": {
+      "listen": [
+        {
+          "id": "extension",
+          "port": 0
+        }
+      ]
+    },
+    "capabilities": {
+      "uses": [
+        "hud.show",
+        "native.bundle_for_remote_port",
+        "native.format_date",
+        "native.frontmost_app",
+        "native.get_window_info",
+        "native.running_apps",
+        "native.world_model"
+      ]
+    }
+  },
+  "provides": {
+    "collections": {
+      "plugin.browser.hints": {
+        "preset": "tag",
+        "label": "Browser hints showing",
+        "writers": "introducer_only",
+        "fields": [],
+        "clear_on_unrelated_command": false,
+        "feeds_matching": {
+          "type": "as_gates"
+        },
+        "description": "Browser hint overlay state \u2014 set when hints are visible. Acts as a gate on hint activation commands so codewords like \"arch\" route to a hint match instead of being interpreted as the literal letter."
+      },
+      "plugin.browser.active": {
+        "preset": "tag",
+        "label": "A browser tab is focused",
+        "fields": [],
+        "description": "Whether a supported browser tab is in the foreground."
+      },
+      "plugin.browser.config": {
+        "preset": "settings",
+        "label": "Browser",
+        "description": "Browser plugin settings. Defaults live here; only your changes are stored.",
+        "fields": [
+          {
+            "key": "hint_display",
+            "label": "Hint display",
+            "field_type": "enum",
+            "enum_values": [
+              "letter",
+              "word",
+              "expand"
+            ],
+            "default": "letter"
+          }
+        ]
+      },
+      "plugin.browser.tabs": {
+        "id_strategy": {
+          "type": "by_field",
+          "field": "spoken"
+        },
+        "privacy": {
+          "access_level": "open"
+        },
+        "preset": "named_entities",
+        "fields": [
+          {
+            "key": "spoken",
+            "field_type": "string",
+            "label": "Spoken word",
+            "required": true
+          },
+          {
+            "key": "tab_id",
+            "field_type": "string",
+            "label": "Tab ID"
+          },
+          {
+            "key": "title",
+            "field_type": "string",
+            "label": "Tab title",
+            "required": true
+          }
+        ],
+        "feeds_matching": {
+          "type": "as_named_entities",
+          "key_field": "spoken",
+          "value_field": "tab_id"
+        },
+        "description": "Open browser tabs, keyed by distinctive spoken words from each tab's title and domain. Published live by the focused browser's extension (POST /tabs); consumed by the contributed 'switch to <tab>' command, whose capture resolves a spoken word to the tab_id the dispatch activates."
+      },
+      "plugin.browser.palette_rows": {
+        "label": "Palette rows",
+        "storage": {
+          "type": "memory_only"
+        },
+        "writers": "introducer_only",
+        "held_by_writer": true,
+        "id_strategy": {
+          "type": "by_field",
+          "field": "id"
+        },
+        "feeds_matching": {
+          "type": "as_record_keyed"
+        },
+        "fields": [
+          {
+            "key": "title",
+            "field_type": "string",
+            "label": "Title",
+            "display": "primary"
+          },
+          {
+            "key": "group",
+            "field_type": "string",
+            "label": "Section"
+          },
+          {
+            "key": "row_id",
+            "field_type": "string",
+            "display": "payload"
+          },
+          {
+            "key": "rank",
+            "field_type": "number",
+            "display": "payload"
+          },
+          {
+            "key": "codeword",
+            "field_type": "string",
+            "display": "payload"
+          }
+        ],
+        "description": "The command palette's rows, relayed from the extension while the Ctrl+K palette is open \u2014 the `@palette` selection surface's lifecycle. Rows present means the surface is open: the platform holds the `_surface.browser.palette` exclusive tag, assigns pointing-deck codewords (honoring `codeword` pins \u2014 the tabs scope pins rows to their strip marks' spoken words), and writes assignments back for the extension to render as chips. `rank` is the visual order; `row_id` stays opaque here and rides the action back to the extension. held_by_writer: a plugin crash drains the rows, which closes the surface \u2014 the exclusive tag can never outlive its palette."
+      },
+      "plugin.browser.palette_reserves": {
+        "label": "Palette nav reserves",
+        "storage": {
+          "type": "memory_only"
+        },
+        "writers": "introducer_only",
+        "held_by_writer": true,
+        "id_strategy": {
+          "type": "by_field",
+          "field": "id"
+        },
+        "feeds_matching": {
+          "type": "as_record_keyed"
+        },
+        "fields": [
+          {
+            "key": "id",
+            "field_type": "string",
+            "label": "Letter"
+          }
+        ],
+        "description": "Letters withheld from palette codeword assignment because the user's keymap binds them to list navigation (record ids ARE the letters; derived extension-side, so a Colemak user reserves different keys). The `@palette` surface's reserved_letters_from source."
+      },
+      "plugin.browser.caret": {
+        "preset": "tag",
+        "label": "Caret selection mode",
+        "writers": "introducer_only",
+        "fields": [],
+        "exclusive": true,
+        "escape_exempt": true,
+        "feeds_matching": {
+          "type": "as_gates"
+        },
+        "description": "Caret/visual selection mode \u2014 held while the extension's caret mode is active (modes.caret in its PUT /session). Exclusive: only caret-gated voice commands (\"select word\", \"copy that\", \u2026) match while selecting, mirroring the keyboard's modal capture. A pure imperative mirror of the extension's mode (no clear_on_unrelated_command, so it can't drift); cleared on exit / focus loss / disconnect."
+      },
+      "plugin.browser.find": {
+        "preset": "tag",
+        "label": "Find session live",
+        "writers": "introducer_only",
+        "fields": [],
+        "feeds_matching": {
+          "type": "as_gates"
+        },
+        "description": "Find session \u2014 held while the extension's find bar is open OR its committed highlights are still up (modes.find in its PUT /session, mirrored from the mode stack's one session lifetime). Gates the contributed find-jump commands (\"next\", \"previous\"), which also require app-active. NON-exclusive and unscoped, deliberately: find AUGMENTS browsing rather than replacing it, so scrolling, badges and tab switching stay live alongside it, and a two-word \"next tab\" still resolves at its own length before the bare \"next\" is considered. Unscoped also keeps it out of Discovery's mode-narrowing path \u2014 it is a session flag, not a mode panel. Not drained on browser unfocus (the session outlives a blur; app-active carries the focus half); cleared by the extension's own exit and by the publisher's SSE disconnect."
+      },
+      "plugin.browser.query_field": {
+        "preset": "tag",
+        "label": "Focus is in a text field",
+        "writers": "introducer_only",
+        "fields": [],
+        "emits_on_change": false,
+        "dictation_profile": "query",
+        "feeds_matching": {
+          "type": "as_gates"
+        },
+        "description": "Focus sits in a single-line text input in the focused browser (query_field in its PUT /session) \u2014 a search box, a field name, a login. NON-exclusive and required by no command: it exists to carry dictation_profile query, so a transcript spoken while it is up is shaped as a query (prosody punctuation stripped) rather than prose. Structural, not per-site \u2014 a single-line input is never where you compose, so no domain list to maintain. A textarea or contenteditable deliberately does NOT set it: that is writing, and writing wants its punctuation. emits_on_change false because focus moves constantly and nothing subscribes. Cleared on blur / focus loss / disconnect; a stale one costs a period, not the command set."
+      },
+      "plugin.browser.media_active": {
+        "preset": "tag",
+        "label": "Controllable media somewhere",
+        "writers": "introducer_only",
+        "fields": [],
+        "feeds_matching": {
+          "type": "as_gates"
+        },
+        "description": "Some browser connection has controllable media: a video in its focused tab, an audible tab anywhere, or a recently-controlled tab still holding its media (media_active in each connection's PUT /session \u2014 the extension's background computes the union). Non-exclusive: gates the contributed media commands (\"pause\", \"faster\", \u2026) and the video-mode entry word system-wide \u2014 deliberately NOT behind browser focus, so a background video pauses from any app; the union itself bounds the exposure (nothing playing \u2192 words not hearable). Per-connection assertions ORed into the tag; one drops with its connection's SSE disconnect and the session is re-sent on focus/reconnect edges."
+      },
+      "plugin.browser.video_mode": {
+        "preset": "tag",
+        "writers": "introducer_only",
+        "merge": "collect",
+        "fields": [],
+        "exclusive": true,
+        "escape_exempt": true,
+        "feeds_matching": {
+          "type": "as_gates",
+          "scoped": true
+        },
+        "description": "Video mode \u2014 say \"video\" (or press w) and the media commands work without discovery friction: the Discovery HUD lists exactly the eligible set (pause, faster, skip back, \u2026) while the mode holds. Caret's shape since Wave 3 C4b: a pure mirror of the extension's ONE video-layer lifetime (modes.video in the PUT /session the mode stack's SW-derived mirror sends), sticky until Escape/q/w/\"over\" \u2014 the old matcher-written, hold-scoped form is gone. The media words are ALSO eligible outside the mode wherever media is present (media_active) \u2014 the mode exists for focused discoverability, not exclusivity of function."
+      },
+      "plugin.browser.auto_scroll": {
+        "preset": "tag",
+        "label": "Page keeps scrolling",
+        "writers": "introducer_only",
+        "fields": [],
+        "exclusive": true,
+        "escape_exempt": true,
+        "feeds_matching": {
+          "type": "as_gates",
+          "scoped": true
+        },
+        "description": "Keep-scrolling mode \u2014 say \"keep scrolling\" and the page scrolls on its own until \"stop\", any key, click or wheel, or its end. A pure mirror of the extension's one run (modes.auto_scroll in the PUT /session the mode stack's SW-derived mirror sends), like video_mode. Exclusive on purpose: while the page moves, \"faster\", \"slower\" and \"stop\" mean the run and nothing else (\"faster\"/\"slower\" are also the media verbs, hearable wherever a tab plays sound), and the Discovery HUD lists exactly those words. Cleared on the run's end, browser unfocus, focus moving to another browser, SSE disconnect, and the global \"over\" (which the plugin forwards so the page stops too)."
+      },
+      "plugin.browser.hints_*": {
+        "description": "FAMILY reservation, not a collection \u2014 the per-prefix hint collections minted at runtime (plugin.browser.hints_prefix, plugin.browser.hints_<letter>, plugin.browser.hints_<prefix>_strict). One per alphabet letter at calibration maximum, so they cannot be enumerated in a manifest. Reserving the prefix is what stops another plugin claiming one first and locking this plugin out of its own hint machinery. It declares no shape: members are still auto-registered on first put."
+      },
+      "plugin.browser.alpha*": {
+        "description": "FAMILY reservation, not a collection \u2014 the sealed alphabet capture collection the two-step hint patterns bind against, created at runtime rather than declared."
+      },
+      "plugin.browser.references": {
+        "preset": "data",
+        "cardinality": "multi",
+        "id_strategy": {
+          "type": "by_field",
+          "field": "host"
+        },
+        "writers": "introducer_only",
+        "merge": "authoritative",
+        "fields": [
+          {
+            "key": "host",
+            "field_type": "string",
+            "required": true
+          },
+          {
+            "key": "refs",
+            "field_type": "object",
+            "required": true
+          }
+        ],
+        "description": "Saved element references per host (one record per host; refs is a {name: {selector, tag, visibleText}} map)."
+      }
+    },
+    "context_names": [
+      {
+        "name": "browser.hints",
+        "tags": [
+          "plugin.browser.hints"
+        ],
+        "prefix_shape": []
+      },
+      {
+        "name": "browser.hints.suffix",
+        "tags": [
+          "plugin.browser.hints"
+        ],
+        "prefix_shape": [
+          "<plugin.browser.hints_prefix>"
+        ]
+      }
+    ],
+    "native_messaging": {
+      "host_name": "com.branchkit.pairing",
+      "chrome_extension_ids": [
+        "ifjhmbmenfbdkkmfknhpokmodjanbdbl"
+      ],
+      "firefox_extension_ids": [
+        "branchkit-browser@branchkit.dev"
+      ],
+      "safari_extension_ids": [
+        "com.branchkit.app.safari",
+        "com.branchkit.app.dev.safari"
+      ]
+    }
+  },
+  "selection_surfaces": {
+    "palette": {
+      "rows": "plugin.browser.palette_rows",
+      "reserved_letters_from": "plugin.browser.palette_reserves",
+      "dictation_profile": "query"
+    }
+  },
+  "capture_macros": {
+    "hint_pair": {
+      "slots": [
+        "<prefix:plugin.browser.alpha>",
+        "<suffix:plugin.browser.hints_${prefix.codeword}_strict>"
+      ],
+      "fields": {
+        "prefix_letter": "{prefix.letter}",
+        "suffix_letter": "{suffix.letter}",
+        "prefix_word": "{prefix.codeword}",
+        "suffix_word": "{suffix.codeword}"
+      },
+      "display": "hint",
+      "max_repeats": 8
+    }
+  },
+  "consumes": {
+    "dispatch": [
+      "placement",
+      "input"
+    ],
+    "collections": [
+      {
+        "name": "_select_browser_s_palette_assign",
+        "fields": [
+          "codeword"
+        ]
+      },
+      {
+        "name": "_surface",
+        "fields": [
+          "name"
+        ]
+      },
+      {
+        "name": "alphabet",
+        "fields": [
+          "codeword",
+          "letter"
+        ],
+        "seeds": [
+          "plugin.browser.alpha",
+          "plugin.browser.hints_prefix",
+          "plugin.browser.hints_*"
+        ]
+      },
+      {
+        "name": "number",
+        "fields": [
+          "key"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "pattern": "_platform.app.focused"
+      },
+      {
+        "pattern": "_platform.input.session_boundary"
+      },
+      {
+        "pattern": "_platform.capture.progress"
+      },
+      {
+        "pattern": "_platform.collection.updated"
+      }
+    ]
+  },
+  "implements": {
+    "on_action": true,
+    "render_settings": true,
+    "settings_tabs": [
+      {
+        "label": "Hints",
+        "key": "hints"
+      },
+      {
+        "label": "Backup",
+        "key": "backup"
+      }
+    ]
+  }
+}

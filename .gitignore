@@ -1,0 +1,12 @@
+browser-plugin
+browser
+connect.json
+src/browser
+src/branchkit-plugin-browser
+
+# Hint-diagnostics snapshots written by /debug-snapshot. In dev mode the
+# plugin dir is symlinked into the source tree, so these land here.
+snapshots/
+debug-scan.json
+extension-perf.jsonl
+extension-perf.jsonl.*

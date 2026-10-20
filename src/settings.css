@@ -1,0 +1,33 @@
+/* The browser plugin's settings tab. Shipped through the SDK's
+   RenderSettingsResponse.CSS, the same door the voice plugin's stylesheet uses,
+   so it lands in the frame's <style id="plugin-css"> rather than being repeated
+   inside the morph target on every re-render.
+
+   The hint-display chooser is a .value-cell holding .segmented-btn buttons —
+   both defined in settings-components.css, because the voice plugin's HUD
+   appearance tab builds the identical control and was carrying its own copy of
+   the same three declarations. Nothing plugin-specific is left to say here. */
+
+/* The one-line description under the setting's name, and each choice's sample
+   badge -- set in the monospace a badge is drawn in and a step smaller, so the
+   choice's NAME leads. No opacity: on the filled (chosen) segment a faded
+   sample would drop under AA against the accent. */
+.bh-note { font-size: var(--font-size--2); color: var(--_ink-dim); margin-top: var(--size--3); font-weight: normal; }
+.bh-sample { font-family: var(--font-mono); font-size: var(--font-size--2); margin-left: var(--size--3); }
+
+/* The Backup tab (settings_backup_view.templ). Cards, tables and badges are
+   the documented settings components; what is left is spacing, the rule-list
+   disclosure (a bare <details>, whose baseline box is undone so it reads as
+   part of the card), and letting the long things a rule holds -- selectors,
+   site patterns -- wrap instead of widening the card. */
+.bb-lede { font-size: var(--font-size--1); max-width: 72ch; margin-bottom: var(--size-0); }
+.bb-error { color: var(--danger-text); font-size: var(--font-size--1); margin-bottom: var(--size-0); }
+.bb-empty { font-size: var(--font-size--1); padding: var(--size--2) 0; }
+.bb-export { font-size: var(--font-size--2); margin-top: var(--size--2); overflow-wrap: anywhere; }
+.bb-rules { background: transparent; padding: 0; border-radius: 0; margin-top: var(--size--2); }
+.bb-rules > summary { background: transparent; border-radius: 0; margin: 0; padding: var(--size--3) 0; cursor: pointer; font-size: var(--font-size--1); font-weight: 600; color: var(--_ink); }
+.bb-rules[open] > summary { margin-bottom: var(--size--2); }
+.bb-pattern { overflow-wrap: anywhere; }
+.bb-entries { list-style: none; display: flex; flex-direction: column; gap: var(--size--3); }
+.bb-entries > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--size--2); max-inline-size: none; font-size: var(--font-size--1); }
+.bb-entries code { font-size: var(--font-size--2); overflow-wrap: anywhere; }
