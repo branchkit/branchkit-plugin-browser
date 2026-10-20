@@ -33,8 +33,9 @@ handler in `batch.go`).
 ## The wire protocol
 
 The extension protocol is declared once, in Go, in `src/wire/` (routes,
-request and reply types, stream events). The extension's `src/wire/gen.ts` is
-generated from it, and both sides compare a wire version at pairing:
+request and reply types, stream events). The extension's `src/wire/gen.ts`
+and this folder's `WIRE.md` are generated from it, and both sides compare a
+wire version at pairing:
 
 ```bash
 cd src && go run ./cmd/wiregen -o ../../../branchkit-extension/src/wire/gen.ts
@@ -42,6 +43,41 @@ cd src && go run ./cmd/wiregen -o ../../../branchkit-extension/src/wire/gen.ts
 
 `just check-browser-wire` in the app repo regenerates and diffs; it is part of
 `just push`. Change the protocol here, regenerate, and commit both repos.
+
+## Writing your own extension
+
+An extension of your own can pair with this plugin and speak the protocol in
+`WIRE.md`. The browser lets an extension start the pairing host only if the
+host's manifest names it, and `plugin.json` names only the BranchKit
+extension, so any other one is connected by the person who installed it.
+
+1. **Connect it.** In BranchKit's Settings, open Plugins → Browser and, under
+   "Other browser extensions", choose the browser family, paste the
+   extension's id and press Connect. Chromium browsers show the id on
+   `chrome://extensions` (developer mode on); Firefox on `about:debugging`
+   (the add-on's `browser_specific_settings.gecko.id`). BranchKit asks you to
+   confirm in its own window, then writes the id into the browsers'
+   native-messaging host manifests. Switch it off or remove it there to stop
+   it pairing; an id another plugin also names pairs with neither.
+2. **Ask the pairing host.** Declare the `nativeMessaging` permission and send
+   one message: `chrome.runtime.sendNativeMessage("com.branchkit.pairing",
+   {v: 1}, reply => …)` (`browser.runtime.sendNativeMessage` in Firefox). The
+   reply is `{"v":1,"port":N,"token":"…"}`, or `{"v":1,"error":"…"}` when
+   BranchKit or the plugin is not running. An extension that is not
+   connected never reaches it: the browser refuses the call
+   (`runtime.lastError`). The port and token change every run: ask again
+   after a refused request.
+3. **Talk to the plugin.** Requests go to `http://127.0.0.1:<port>` with
+   `Authorization: Bearer <token>`. Buy a ticket (`POST /events/ticket`, with
+   your `wire_version`), then open the event stream
+   (`GET /events?ticket=…&conn_id=…`). `conn_id` is a nonce your extension
+   picks for this connection and sends in every body that has one.
+
+`WIRE.md` lists every route, event and type, with the current `WIRE_VERSION`;
+it is generated from `src/wire/` (`cd src && go run ./cmd/wiregen -md -o
+../WIRE.md`) and a test fails when it falls behind. Each change to the
+protocol changes the version, and the ticket refuses an extension built
+against another one.
 
 ## What it declares
 
