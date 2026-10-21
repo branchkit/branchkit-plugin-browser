@@ -1,6 +1,6 @@
 # Browser plugin
 
-The BranchKit side of browser control. It pairs with the BranchKit Browser
+The BranchKit side of browser control. It pairs with the BranchKit
 extension (`branchkit-extension` in the app workspace), turns what the
 extension reports about the page (hint badges, tabs, find, caret, media) into
 collections and commands the platform matcher can use, and routes the matched
