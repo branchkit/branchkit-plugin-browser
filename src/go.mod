@@ -4,7 +4,7 @@ go 1.24
 
 require (
 	github.com/a-h/templ v0.3.1001
-	github.com/branchkit/plugin-sdk-go v0.21.0
+	github.com/branchkit/plugin-sdk-go v0.24.0
 )
 
 require (

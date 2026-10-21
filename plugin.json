@@ -499,7 +499,7 @@
   "implements": {
     "on_action": true,
     "render_settings": true,
-    "settings_tabs": [
+    "pages": [
       {
         "label": "Hints",
         "key": "hints"

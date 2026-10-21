@@ -2,8 +2,8 @@ github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERo
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
 github.com/a-h/templ v0.3.1001 h1:yHDTgexACdJttyiyamcTHXr2QkIeVF1MukLy44EAhMY=
 github.com/a-h/templ v0.3.1001/go.mod h1:oCZcnKRf5jjsGpf2yELzQfodLphd2mwecwG4Crk5HBo=
-github.com/branchkit/plugin-sdk-go v0.21.0 h1:0LumtQuH9aSASqb+LhsChWs8RfyYQBwOaX7idrJxG3s=
-github.com/branchkit/plugin-sdk-go v0.21.0/go.mod h1:fRlJl1KxGKmeSUfvf7x6kP6N3bY6xnhAqlXhImMK03o=
+github.com/branchkit/plugin-sdk-go v0.24.0 h1:3QGjRj3tU2gXo14gGvUjuS9Kulu++xjoLPeuxsnW2Mc=
+github.com/branchkit/plugin-sdk-go v0.24.0/go.mod h1:fRlJl1KxGKmeSUfvf7x6kP6N3bY6xnhAqlXhImMK03o=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 golang.org/x/sys v0.34.0 h1:H5Y5sJ2L2JRdyv7ROF1he/lPdvFsd0mJHFw2ThKHxLA=

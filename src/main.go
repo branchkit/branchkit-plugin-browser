@@ -397,8 +397,8 @@ func main() {
 	// know their action set at compile time.
 	branchkit.HandleTyped(h.plugin, "on_action", h.handleOnAction)
 	h.plugin.SettingsCSS(browserCSS)
-	h.plugin.SettingsTab("hints", h.renderBrowserSettings)
-	h.plugin.SettingsTab("backup", h.renderBackupSettings)
+	h.plugin.Page("hints", h.renderBrowserSettings)
+	h.plugin.Page("backup", h.renderBackupSettings)
 	branchkit.HandleCommand(h.plugin, "set_hint_display", h.handleSetHintDisplay)
 	branchkit.HandleCommand(h.plugin, "download_settings_backup", h.handleDownloadSettingsBackup)
 
