@@ -1,5 +1,5 @@
 {
-  "$schema": "https://branchkit.dev/schemas/manifest.json",
+  "$schema": "https://branchkit.com/schemas/manifest.json",
   "id": "browser",
   "name": "Browser",
   "icon": "globe",
@@ -414,7 +414,7 @@
         "ifjhmbmenfbdkkmfknhpokmodjanbdbl"
       ],
       "firefox_extension_ids": [
-        "branchkit-browser@branchkit.dev"
+        "branchkit-browser@branchkit.com"
       ],
       "safari_extension_ids": [
         "com.branchkit.app.safari",
