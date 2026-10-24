@@ -70,6 +70,8 @@ type Host struct {
 	exportDataFile          func(rel, name string) (string, error)
 	frontmostBundle         func() (string, error)
 	listHintRecords         func(collName string) ([]branchkit.CollectionRecord, error)
+	hintsTagHeld            func(pluginID string) (bool, error)
+	enumerateCommands       func() ([]branchkit.EnumeratedCommand, error)
 	listPaletteSurfaceGates func() ([]string, error)
 	listRunningBundles      func() (map[string]bool, error)
 	listSpaces              func() ([]branchkit.SpaceInfo, error)
@@ -123,6 +125,8 @@ func newHost(p *branchkit.Plugin) *Host {
 	h.exportDataFile = h.exportDataFileDefault
 	h.frontmostBundle = h.frontmostBundleDefault
 	h.listHintRecords = h.listHintRecordsDefault
+	h.hintsTagHeld = h.hintsTagHeldDefault
+	h.enumerateCommands = func() ([]branchkit.EnumeratedCommand, error) { return h.plugin.CommandsEnumerate() }
 	h.listPaletteSurfaceGates = h.listPaletteSurfaceGatesDefault
 	h.listRunningBundles = h.listRunningBundlesDefault
 	h.listSpaces = h.plugin.NativeListSpaces

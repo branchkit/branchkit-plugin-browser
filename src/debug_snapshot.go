@@ -195,3 +195,52 @@ func pruneSnapshotsIn(baseDir string) {
 		_ = os.RemoveAll(filepath.Join(baseDir, name))
 	}
 }
+
+// handleDebugMatchableGet answers GET /debug/matchable: the platform's view of
+// this plugin's hint gate and of the commands it makes eligible, for the
+// snapshot's painted-versus-matchable reconcile. The extension once read the
+// platform's own inspector route for this; that route needs a Settings
+// session, and the extension's one authenticated channel is this listener.
+//
+// The gate is read back from the platform (the tag collection's record), not
+// from this plugin's hintGate state, because the reconcile exists to catch the
+// two disagreeing. Eligibility is this plugin's own commands whose
+// requires_tags the platform holds; another plugin's exclusive mode is not
+// visible from here (wire.MatchableView).
+func (h *Host) handleDebugMatchableGet(_ *http.Request, _ *wire.Empty) (wire.MatchableView, error) {
+	pluginID := h.state.PluginID
+	view := wire.MatchableView{ActiveTags: []string{}, Eligible: []wire.MatchableCommand{}}
+	held, err := h.hintsTagHeld(pluginID)
+	if err != nil {
+		return view, statusError(http.StatusBadGateway, "read hints gate: "+err.Error())
+	}
+	active := map[string]bool{}
+	if held {
+		tag := hintsTagName(pluginID)
+		active[tag] = true
+		view.ActiveTags = append(view.ActiveTags, tag)
+	}
+	cmds, err := h.enumerateCommands()
+	if err != nil {
+		return view, statusError(http.StatusBadGateway, "enumerate commands: "+err.Error())
+	}
+	for _, c := range cmds {
+		if c.OwnerPlugin != pluginID || len(c.RequiresTags) == 0 {
+			continue
+		}
+		all := true
+		for _, t := range c.RequiresTags {
+			all = all && active[t]
+		}
+		if all {
+			view.Eligible = append(view.Eligible, wire.MatchableCommand{RequiresTags: c.RequiresTags})
+		}
+	}
+	return view, nil
+}
+
+// hintsTagHeldDefault reads the hint gate's record back from the platform.
+func (h *Host) hintsTagHeldDefault(pluginID string) (bool, error) {
+	rec, err := h.plugin.Get(hintsTagName(pluginID), "singleton")
+	return rec != nil, err
+}

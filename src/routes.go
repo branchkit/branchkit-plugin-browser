@@ -346,6 +346,7 @@ func (h *Host) routeHandlers(tickets *ticketStore) map[string]boundRoute {
 		wire.PerfReport.Key():           typed(h.handlePerfReportPost),
 		wire.DebugSnapshotRoute.Key():   typed(h.handleDebugSnapshot),
 		wire.DebugScreenshot.Key():      typed(h.handleDebugSnapshotScreenshot),
+		wire.DebugMatchable.Key():       typed(h.handleDebugMatchableGet),
 		wire.EventsTicket.Key():         typed(h.ticketHandler(tickets)),
 		wire.Events.Key():               stream(h.eventsHandler(tickets)),
 		wire.Health.Key():               typed(h.handleHealthGet),

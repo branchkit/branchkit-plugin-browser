@@ -446,6 +446,22 @@ type EventsQuery struct {
 	ConnID string `json:"conn_id"`
 }
 
+// MatchableView is the platform's matcher state as it bears on this plugin's
+// commands: which of this plugin's gates the platform holds active, and which
+// of its commands those gates make eligible. Read for a diagnostics
+// snapshot's painted-versus-matchable reconcile. Exclusive modes of other
+// plugins are not visible here, so a command listed eligible can still be
+// suppressed by one.
+type MatchableView struct {
+	ActiveTags []string           `json:"active_tags"`
+	Eligible   []MatchableCommand `json:"eligible"`
+}
+
+// MatchableCommand is one eligible command, by the tags it requires.
+type MatchableCommand struct {
+	RequiresTags []string `json:"requires_tags"`
+}
+
 // HealthResponse is for a person or agent debugging: the extension never
 // calls it.
 type HealthResponse struct {

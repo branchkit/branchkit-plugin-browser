@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/branchkit/branchkit-plugin-browser/wire"
+	"github.com/branchkit/plugin-sdk-go"
 )
 
 func TestIsSafeSnapshotID(t *testing.T) {
@@ -177,4 +180,37 @@ func twoDigit(n int) string {
 		return "0" + string(rune('0'+n))
 	}
 	return string(rune('0'+n/10)) + string(rune('0'+n%10))
+}
+
+// The reconcile's matchable view is the platform's: the gate read back from
+// its record (not the plugin's own belief), and only this plugin's commands
+// whose tags that gate satisfies.
+func TestDebugMatchableReadsThePlatformGate(t *testing.T) {
+	h := newTestHost()
+	h.state = &PluginState{PluginID: "browser"}
+	cmds := []branchkit.EnumeratedCommand{
+		{OwnerPlugin: "browser", RequiresTags: []string{"plugin.browser.hints"}},
+		{OwnerPlugin: "browser", RequiresTags: []string{"plugin.browser.hints", "plugin.browser.caret"}},
+		{OwnerPlugin: "browser"},
+		{OwnerPlugin: "tiling", RequiresTags: []string{"plugin.browser.hints"}},
+	}
+	h.enumerateCommands = func() ([]branchkit.EnumeratedCommand, error) { return cmds, nil }
+
+	h.hintsTagHeld = func(string) (bool, error) { return false, nil }
+	off, err := h.handleDebugMatchableGet(nil, &wire.Empty{})
+	if err != nil || len(off.ActiveTags) != 0 || len(off.Eligible) != 0 {
+		t.Fatalf("gate not held: want nothing active or eligible, got %+v, %v", off, err)
+	}
+
+	h.hintsTagHeld = func(string) (bool, error) { return true, nil }
+	on, err := h.handleDebugMatchableGet(nil, &wire.Empty{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(on.ActiveTags) != 1 || on.ActiveTags[0] != "plugin.browser.hints" {
+		t.Fatalf("active tags: %v", on.ActiveTags)
+	}
+	if len(on.Eligible) != 1 || len(on.Eligible[0].RequiresTags) != 1 {
+		t.Fatalf("eligible: want only the hints-gated browser command, got %+v", on.Eligible)
+	}
 }

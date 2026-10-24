@@ -6,7 +6,7 @@ What an extension and the browser plugin say to each other once paired: every
 route on the plugin's listener, the events on its stream, and the shape of
 each body. How an extension pairs in the first place is in the README.
 
-`WIRE_VERSION`: `7d66a5523ce21e12`. The ticket request carries it, and a mismatch is
+`WIRE_VERSION`: `d9142fc645c80eba`. The ticket request carries it, and a mismatch is
 refused (409): the plugin decodes strictly, so any change to a route, field
 or type is a breaking one, and changes the version. A doc edit does not.
 
@@ -51,6 +51,7 @@ fields are refused.
 | POST | `/perf-report` | `PerfReportRequest` | `Ack` | A perf snapshot for the JSONL trail. |
 | POST | `/debug-snapshot` | `DebugSnapshot` | `Ack` | The structured half of a diagnostics snapshot. |
 | POST | `/debug-snapshot/screenshot` | `DebugScreenshotRequest` | `Ack` | The snapshot's viewport PNG, or why there is none. |
+| GET | `/debug/matchable` | `Empty` (query) | `MatchableView` | This plugin's active gates and eligible commands, as the platform holds them (the snapshot's reconcile). |
 | POST | `/events/ticket` | `TicketRequest` | `TicketResponse` | A one-time ticket for the event stream; refused (409) on a wire_version mismatch. |
 | GET | `/events` | `EventsQuery` (query) | event stream | The event stream (SSE): connected, alphabet, action. |
 | GET | `/health` | `Empty` (query) | `HealthResponse` | Liveness and stream-client count, for debugging (served without CORS headers). |
@@ -369,6 +370,24 @@ export interface HintsSessionEndRequest {
    * document's batches is left alone (a navigation's late disconnect).
    */
   doc_id?: string;
+}
+
+/** MatchableCommand is one eligible command, by the tags it requires. */
+export interface MatchableCommand {
+  requires_tags: string[] | null;
+}
+
+/**
+ * MatchableView is the platform's matcher state as it bears on this plugin's
+ * commands: which of this plugin's gates the platform holds active, and which
+ * of its commands those gates make eligible. Read for a diagnostics
+ * snapshot's painted-versus-matchable reconcile. Exclusive modes of other
+ * plugins are not visible here, so a command listed eligible can still be
+ * suppressed by one.
+ */
+export interface MatchableView {
+  active_tags: string[] | null;
+  eligible: MatchableCommand[] | null;
 }
 
 /**
@@ -756,6 +775,8 @@ export interface GetRoutes {
   '/references': { query: ReferencesQuery; resp: ReferencesResponse };
   /** The kept copy of the extension's settings: this family's, else the newest. */
   '/settings-backup': { query: SettingsBackupQuery; resp: SettingsBackupResponse };
+  /** This plugin's active gates and eligible commands, as the platform holds them (the snapshot's reconcile). */
+  '/debug/matchable': { query: Empty; resp: MatchableView };
   /** Liveness and stream-client count, for debugging (served without CORS headers). */
   '/health': { query: Empty; resp: HealthResponse };
 }
@@ -805,5 +826,5 @@ export const SYNTHETIC_ACTIONS = [
   'resize_window',
 ] as const;
 
-export const WIRE_VERSION = '7d66a5523ce21e12';
+export const WIRE_VERSION = 'd9142fc645c80eba';
 ```

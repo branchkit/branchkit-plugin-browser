@@ -102,6 +102,8 @@ var (
 		Doc: "The structured half of a diagnostics snapshot."}
 	DebugScreenshot = Route{Method: "POST", Path: "/debug-snapshot/screenshot", Req: DebugScreenshotRequest{}, Resp: Ack{}, LargeBody: true,
 		Doc: "The snapshot's viewport PNG, or why there is none."}
+	DebugMatchable = Route{Method: "GET", Path: "/debug/matchable", Req: Empty{}, Resp: MatchableView{},
+		Doc: "This plugin's active gates and eligible commands, as the platform holds them (the snapshot's reconcile)."}
 
 	EventsTicket = Route{Method: "POST", Path: "/events/ticket", Req: TicketRequest{}, Resp: TicketResponse{},
 		Doc: "A one-time ticket for the event stream; refused (409) on a wire_version mismatch."}
@@ -125,7 +127,7 @@ var Routes = []Route{
 	CommandAliases, HintDisplay,
 	ReferenceNames, References, ReferenceSave,
 	SettingsBackupPut, SettingsBackupGet,
-	DebugLog, PluginDebugLog, PerfReport, DebugSnapshotRoute, DebugScreenshot,
+	DebugLog, PluginDebugLog, PerfReport, DebugSnapshotRoute, DebugScreenshot, DebugMatchable,
 	EventsTicket, Events, Health,
 	FocusPinGet, FocusPinSet,
 }
