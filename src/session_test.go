@@ -255,39 +255,42 @@ func TestSessionMediaPickMovesOnlyOnMediaNews(t *testing.T) {
 	}
 }
 
-// browser.caret_updated follows the TAG, wherever it moves: a caret asked for
-// in the background is announced when focus takes it, and the unfocus drain
-// announces its release. It used to be emitted by the session route alone,
-// for the request — so a deferred caret was announced as active=false and
-// its later take on focus gain never at all.
-func TestCaretUpdatedFollowsTheTag(t *testing.T) {
+// The caret tag follows the caret, wherever it moves: a caret asked for in
+// the background takes the tag when focus reaches its connection, and the
+// unfocus drain releases it. The tag write is what the platform announces to
+// other plugins, so the writes themselves are what this watches; a deferred
+// caret writes nothing until focus arrives.
+func TestCaretTagFollowsTheCaret(t *testing.T) {
 	h, _ := newRoutingHost(t)
 	connectBrowser(h, "profile-1", chromeBundle)
 	connectBrowser(h, "profile-2", chromeBundle)
 	captureSessionSeams(h, t)
-	type ev struct {
-		conn   string
-		active bool
+	type write struct {
+		conn string // the caret's connection when the tag was taken
+		put  bool
 	}
-	var got []ev
-	h.appendEvent = func(typ string, data map[string]any) {
-		if typ == "browser.caret_updated" {
-			got = append(got, ev{data["conn_id"].(string), data["active"].(bool)})
-		}
+	var got []write
+	h.putCaretTag = func(string) error {
+		got = append(got, write{conn: h.state.CaretConnID, put: true})
+		return nil
+	}
+	h.deleteCaretTag = func(string) error {
+		got = append(got, write{put: false})
+		return nil
 	}
 	focusApp(h, chromeBundle)
 	claimFocus(t, h, "profile-1")
 
 	putSession(t, h, wire.SessionRequest{ConnID: "profile-2", Modes: wire.SessionModes{Caret: true}})
 	if len(got) != 0 {
-		t.Fatalf("a deferred caret announced %v before any tag moved", got)
+		t.Fatalf("a deferred caret wrote the tag before focus reached it: %v", got)
 	}
 	claimFocus(t, h, "profile-2")
-	if len(got) != 1 || got[0] != (ev{"profile-2", true}) {
-		t.Fatalf("events after focus gain = %v, want [profile-2 active]", got)
+	if len(got) != 1 || got[0] != (write{conn: "profile-2", put: true}) {
+		t.Fatalf("writes after focus gain = %v, want the tag taken for profile-2", got)
 	}
 	focusApp(h, "com.apple.Terminal")
-	if len(got) != 2 || got[1] != (ev{"profile-2", false}) {
-		t.Fatalf("events after unfocus = %v, want the release announced for profile-2", got)
+	if len(got) != 2 || got[1].put {
+		t.Fatalf("writes after unfocus = %v, want the tag released", got)
 	}
 }

@@ -344,3 +344,17 @@ func TestBoundCodeword(t *testing.T) {
 		})
 	}
 }
+
+// A session's end is logged when a browser is connected, by counts and
+// settings only. Every hold's release reaches the handler, so with no browser
+// connected, when nothing was sent, it logs nothing.
+func TestSessionEndLogsOnlyWithABrowserConnected(t *testing.T) {
+	h, _ := newRoutingHost(t)
+	if logged := captureStderr(t, h.handleSessionEnded); strings.Contains(logged, "session ended") {
+		t.Errorf("a session end with no browser connected was logged:\n%s", logged)
+	}
+	connectBrowser(h, "profile-1", chromeBundle)
+	if logged := captureStderr(t, h.handleSessionEnded); !strings.Contains(logged, "session ended: hint display reset sent to 1 connection(s)") {
+		t.Errorf("a session end with a browser connected left no log line:\n%s", logged)
+	}
+}

@@ -1130,8 +1130,6 @@ func (h *Host) handleGrammarFramePut(_ *http.Request, reqp *GrammarFrameRequest)
 		req.ConnID, req.TabID, req.FrameID,
 		len(req.Elements), len(commit.succeeded), len(commit.failed), codewordCount)
 
-	h.emitGrammarFrameEvent(&req, commit, false)
-
 	// Level-derive the hints tag from the post-commit focused projection — the
 	// single policy point. Arms when this
 	// focused-source request left the session holding codewords (badges shown,
@@ -1390,7 +1388,6 @@ func (h *Host) respondStoredFrame(req *GrammarFrameRequest, adm frameAdmission, 
 			req.TabID, req.WindowID, req.ConnID, req.Visible)
 	}
 
-	h.emitGrammarFrameEvent(req, commit, true)
 	return GrammarFrameResponse{
 		Result:             "stored",
 		Failed:             nonNil(commit.failed),
@@ -1502,23 +1499,6 @@ func (h *Host) finalizeSession(session *FrameSession) int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return len(session.Codewords)
-}
-
-// emitGrammarFrameEvent emits the browser.grammar_batch observability event
-// (the name predates full-state requests; consumers key on it). `stored` marks
-// the non-focused stored-not-projected path.
-func (h *Host) emitGrammarFrameEvent(req *GrammarFrameRequest, commit frameCommit, stored bool) {
-	payload := map[string]any{
-		"tab_id":    req.TabID,
-		"frame_id":  req.FrameID,
-		"elements":  len(req.Elements),
-		"succeeded": len(commit.succeeded),
-		"failed":    len(commit.failed),
-	}
-	if stored {
-		payload["stored"] = true
-	}
-	h.emitEvent("browser.grammar_batch", payload)
 }
 
 // hintCollection names one of the per-prefix hint collections under the

@@ -200,7 +200,6 @@ func (h *Host) handleFocusPinPost(_ *http.Request, body *wire.FocusPinRequest) (
 		armBundle = h.state.FocusedBrowserBundleID
 		armVis = h.state.HintVisibility
 	}
-	releaseBundle := h.state.FocusedBundleID
 	focusedConn := h.state.FocusedConnID
 	h.mu.Unlock()
 
@@ -209,7 +208,7 @@ func (h *Host) handleFocusPinPost(_ *http.Request, body *wire.FocusPinRequest) (
 	} else {
 		branchkit.Logf(h.state.PluginID, "[FOCUS-PIN] unpinned (was %q); focus follows the OS again, focused_conn=%q", prev, focusedConn)
 	}
-	h.applyFocusOutcome(isBrowser, needsRescan, armBundle, armVis, releaseBundle, "focus_pin")
+	h.applyFocusOutcome(isBrowser, needsRescan, armBundle, armVis, "focus_pin")
 	return h.focusPinStateSnapshot(), nil
 }
 
@@ -228,7 +227,7 @@ func (h *Host) restoreOSFrontmostLocked() {
 // other focus inputs do: the rescan, the arm on a focus-gain edge, the
 // derived hints tag whenever a browser is focused (handleActiveTabPost's
 // order), the release when none is. Must NOT hold mu.
-func (h *Host) applyFocusOutcome(isBrowser, needsRescan bool, armBundle, armVis, releaseBundle, reason string) {
+func (h *Host) applyFocusOutcome(isBrowser, needsRescan bool, armBundle, armVis, reason string) {
 	if needsRescan {
 		h.pushRescanToClients()
 	}
@@ -238,6 +237,6 @@ func (h *Host) applyFocusOutcome(isBrowser, needsRescan bool, armBundle, armVis,
 	if isBrowser {
 		h.applyDerivedHintsTag(reason)
 	} else {
-		h.releaseBrowserFocusUnlocked(h.state.PluginID, releaseBundle, reason)
+		h.releaseBrowserFocusUnlocked(h.state.PluginID, reason)
 	}
 }

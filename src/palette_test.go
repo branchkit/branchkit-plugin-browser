@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/branchkit/plugin-sdk-go"
@@ -142,6 +145,40 @@ func TestPaletteDrainEmptiesRowsAndReserves(t *testing.T) {
 	h.drainPaletteLocked("browser", "test-again")
 	if len(s.rows) != writes {
 		t.Errorf("empty drain wrote rows again")
+	}
+}
+
+// A palette from a browser behind the focused one is refused: it must not
+// open the palette's exclusive mode over the focused browser's speech. Nothing
+// else records the refusal, so it is logged, by its counts and never by a
+// row's title.
+func TestPaletteFromABackgroundBrowserIsRefusedAndLogged(t *testing.T) {
+	h, _ := newRoutingHost(t)
+	connectBrowser(h, "profile-1", chromeBundle)
+	connectBrowser(h, "profile-2", chromeBundle)
+	focusApp(h, chromeBundle)
+	claimFocus(t, h, "profile-1")
+
+	logged := captureStderr(t, func() {
+		rec := httptest.NewRecorder()
+		serveRoute(h, rec, httptest.NewRequest(http.MethodPost, "/palette",
+			strings.NewReader(`{"conn_id":"profile-2","entries":[{"title":"Quarterly report","row_id":"tab:7"}]}`)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("POST /palette status = %d body %s", rec.Code, rec.Body.String())
+		}
+	})
+
+	h.mu.Lock()
+	conn, held := h.state.PaletteConnID, len(h.state.PaletteEntries)
+	h.mu.Unlock()
+	if conn != "" || held != 0 {
+		t.Fatalf("a background browser's palette was taken: conn=%q entries=%d", conn, held)
+	}
+	if !strings.Contains(logged, `palette REFUSED conn="profile-2" entries=1: conn="profile-1" is focused`) {
+		t.Errorf("the refusal left no log line:\n%s", logged)
+	}
+	if strings.Contains(logged, "Quarterly report") {
+		t.Errorf("a row's title reached the log:\n%s", logged)
 	}
 }
 

@@ -476,21 +476,6 @@ func (h *Host) handleDispatchResultPost(_ *http.Request, reqp *DispatchResultReq
 		}
 		h.reportActionProblem(req.Action, refusal.problem)
 	}
-
-	h.emitEvent("browser.dispatch_result", map[string]any{
-		"tab_id":     tabID,
-		"action":     req.Action,
-		"codeword":   req.Codeword,
-		"resolution": req.Resolution,
-		"elem_tag":   req.ElemTag,
-		"taken":      req.Taken,
-		"ok":         req.OK,
-		"frame":      req.Frame,
-		"detail":     req.Detail,
-		"followup":   req.Followup,
-		"conn_id":    req.ConnID,
-		"unseen":     req.Unseen,
-	})
 	return ack()
 }
 

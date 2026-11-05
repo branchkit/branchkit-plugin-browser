@@ -144,10 +144,11 @@ func (h *Host) handleTabsPost(_ *http.Request, req *wire.TabsRequest) (wire.Ack,
 		h.scheduleVocabularyCommit(pluginID)
 	}
 
-	h.emitEvent("browser.tabs_updated", map[string]any{
-		"conn_id":   req.ConnID,
-		"entries":   len(req.Entries),
-		"projected": projected,
-	})
+	// A projected set is logged by the sync, and the platform records the
+	// collection write; a stored one would otherwise leave no trace.
+	if !projected {
+		branchkit.Logf(pluginID, "[INGEST] tabs STORED (not the projection source) conn=%q entries=%d",
+			req.ConnID, len(req.Entries))
+	}
 	return ack()
 }

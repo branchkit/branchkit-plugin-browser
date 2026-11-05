@@ -228,17 +228,26 @@ func (h *Host) handlePalettePost(_ *http.Request, req *wire.PaletteRequest) (wir
 
 	h.mu.Lock()
 	pluginID := h.state.PluginID
-	accepted := false
+	focusedConn := h.state.FocusedConnID
+	refused := false
 	if len(req.Entries) == 0 {
 		h.drainPaletteLocked(pluginID, "publisher_clear")
-	} else if h.state.FocusedConnID == "" || h.state.FocusedConnID == req.ConnID {
+	} else if focusedConn == "" || focusedConn == req.ConnID {
 		h.state.PaletteConnID = req.ConnID
 		h.state.PaletteEntries = req.Entries
 		h.state.PaletteReserves = req.Reserves
 		h.syncPaletteLocked(pluginID)
-		accepted = true
+	} else {
+		refused = true
 	}
 	h.mu.Unlock()
+
+	// A relayed palette is logged by the sync and a drained one by the drain;
+	// a refused one would otherwise leave no trace.
+	if refused {
+		branchkit.Logf(pluginID, "[TAGS] palette REFUSED conn=%q entries=%d: conn=%q is focused",
+			req.ConnID, len(req.Entries), focusedConn)
+	}
 
 	// Row words are alphabet words already in the engine union (the platform
 	// seeds every `_select_*` collection from the deck), but pinned pair
@@ -246,11 +255,5 @@ func (h *Host) handlePalettePost(_ *http.Request, req *wire.PaletteRequest) (wir
 	// DAG/never-standalone rebuild propagate (a no-op when the desired-
 	// vocabulary hash didn't move).
 	h.scheduleVocabularyCommit(pluginID)
-
-	h.emitEvent("browser.palette_updated", map[string]any{
-		"conn_id":   req.ConnID,
-		"entries":   len(req.Entries),
-		"projected": accepted,
-	})
 	return ack()
 }

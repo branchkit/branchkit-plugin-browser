@@ -158,7 +158,6 @@ func (h *Host) clearHintsStateOnDisconnect(pluginID string) {
 	// against records that no longer exist.
 	h.state.LastSyncFingerprint = make(map[string]uint64)
 	h.state.LastSyncKeyFingerprint = make(map[string]uint64)
-	bundle := h.state.FocusedBundleID
 	h.mu.Unlock()
 	// No connection left, so no browser can be in front: the app-active tag
 	// must go too, or "over", "toggle", the tab-desk and reference commands
@@ -166,7 +165,7 @@ func (h *Host) clearHintsStateOnDisconnect(pluginID string) {
 	// here first; this covers a last connection that was never bound as
 	// focused. The release re-checks under mu, so a reconnect that already
 	// re-armed is left alone.)
-	h.releaseBrowserFocusUnlocked(pluginID, bundle, "last_disconnect")
+	h.releaseBrowserFocusUnlocked(pluginID, "last_disconnect")
 }
 
 // sealedHintFields is the action-param map every hint-targeting command
@@ -512,20 +511,12 @@ func (h *Host) handleOnAction(req *branchkit.OnActionRequest) (any, error) {
 		return actionFailed(problem), nil
 	}
 
-	// Surface in branchkit.log so dispatches are visible even if the emitted
-	// event stream is unavailable. The codeword/id/elem_type live in
-	// params; we extract the common ones for log readability and leave the
-	// emitted event as the structured source of truth.
+	// The platform records the dispatch itself; this line adds where it went.
+	// Only the common params are pulled out (codeword/id/frame_id/elem_type),
+	// never the whole params block.
 	branchkit.Logf("browser", "dispatch tab=%d action=%s sse=%d codeword=%q id=%s frame_id=%s elem_type=%s",
 		tabID, subAction, clientCount,
 		event.Param("codeword"), event.Param("id"), event.Param("frame_id"), event.Param("elem_type"))
-
-	h.emitEvent("browser.action_dispatched", map[string]any{
-		"action":      subAction,
-		"params":      rawParams,
-		"sse_clients": clientCount,
-		"tab_id":      tabID,
-	})
 
 	return branchkit.OnActionResponse{Status: branchkit.OnActionStatusOk}, nil
 }

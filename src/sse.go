@@ -480,7 +480,7 @@ func (h *Host) disconnectSSEClient(pluginID, connID, clientID string) {
 	}
 	if focusLost {
 		branchkit.Logf(pluginID, "[FOCUS] focused conn=%q disconnected; no connection left for %q", connID, lostBundle)
-		h.releaseBrowserFocusUnlocked(pluginID, lostBundle, "sse_disconnect conn="+connID)
+		h.releaseBrowserFocusUnlocked(pluginID, "sse_disconnect conn="+connID)
 	}
 	if lastClient {
 		h.clearHintsStateOnDisconnect(h.state.PluginID)

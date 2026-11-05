@@ -13,12 +13,11 @@ import (
 // Telling the person when a spoken browser command could not run.
 //
 // A command that reached no browser used to answer "ok" and do nothing:
-// silence, which the person cannot tell from a misrecognition. Now three
+// silence, which the person cannot tell from a misrecognition. Now two
 // things happen:
 //
 //   - the on_action reply is status "error" with the reason in `result`, so
 //     the platform and any dispatch caller see the failure;
-//   - a browser.action_failed event carries it on the bus;
 //   - the reason becomes a `problem` document on this plugin's own HUD
 //     channel (output.state), the semantic output channel every renderer
 //     reads: the platform draws it in the channel's window, and the
@@ -330,14 +329,9 @@ func (h *Host) showProblemWindowDefault() error {
 }
 
 // reportActionProblem is the whole report for a command that did not run: the
-// log line, the bus event, and the person-facing problem. Off the caller's
-// goroutine for the RPCs, so an on_action reply is never held up by them.
+// log line and the person-facing problem. Off the caller's goroutine for the
+// RPCs, so an on_action reply is never held up by them.
 func (h *Host) reportActionProblem(action string, p actionProblem) {
 	branchkit.Logf(h.state.PluginID, "[PROBLEM] action=%s reason=%s: %s", action, p.Reason, p.Title)
-	h.emitEvent("browser.action_failed", map[string]any{
-		"action":  action,
-		"reason":  p.Reason,
-		"message": p.Phrase,
-	})
 	h.runAsync(func() { h.reportProblem(p) })
 }

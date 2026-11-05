@@ -64,7 +64,6 @@ type Host struct {
 	deleteQueryFieldTag     func(pluginID string) error
 	deleteVideoModeTag      func(pluginID string) error
 	dispatchPlatform        func(actionType string, params map[string]any) error
-	appendEvent             func(eventType string, data map[string]any)
 	dispatchPlatformRPC     func(actionType string, params map[string]any) error
 	emitDisconnectNudge     func(pluginID, bundle string)
 	exportDataFile          func(rel, name string) (string, error)
@@ -119,7 +118,6 @@ func newHost(p *branchkit.Plugin) *Host {
 	h.deleteQueryFieldTag = h.deleteQueryFieldTagDefault
 	h.deleteVideoModeTag = h.deleteVideoModeTagDefault
 	h.dispatchPlatform = h.dispatchPlatformAction
-	h.appendEvent = h.appendEventDefault
 	h.dispatchPlatformRPC = h.dispatchPlatformRPCDefault
 	h.emitDisconnectNudge = h.emitDisconnectNudgeDefault
 	h.exportDataFile = h.exportDataFileDefault

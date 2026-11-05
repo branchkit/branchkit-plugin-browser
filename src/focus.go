@@ -96,7 +96,7 @@ func (h *Host) handleAppFocused(event branchkit.AppFocusedEventParams) {
 		// recompute — zero extension traffic.
 		h.applyDerivedHintsTag("app_refocus bundle=" + event.BundleID)
 	} else {
-		h.releaseBrowserFocusUnlocked(h.state.PluginID, event.BundleID, "focus_lost bundle="+event.BundleID)
+		h.releaseBrowserFocusUnlocked(h.state.PluginID, "focus_lost bundle="+event.BundleID)
 	}
 }
 
@@ -126,7 +126,7 @@ func (h *Host) deleteActiveTagDefault(string) error {
 // than as the caller saw it: focus inputs arrive on several goroutines (OS
 // events, /focus and /active-tab posts, disconnects), so a release decided
 // before a newer focus gain must not land after it.
-func (h *Host) releaseBrowserFocusUnlocked(pluginID, bundle, reason string) {
+func (h *Host) releaseBrowserFocusUnlocked(pluginID, reason string) {
 	h.mu.Lock()
 	if h.state.BrowserFocused {
 		h.mu.Unlock()
@@ -138,7 +138,6 @@ func (h *Host) releaseBrowserFocusUnlocked(pluginID, bundle, reason string) {
 	}
 	h.state.HintGate.transitionToIdle(reason)
 	h.mu.Unlock()
-	h.emitEvent("browser.focus_changed", map[string]any{"bundle_id": bundle, "active": false})
 }
 
 // focusedConnSnapshot reads FocusedConnID under the lock, for log lines
@@ -183,7 +182,6 @@ func (h *Host) armBrowserFocusUnlocked(pluginID, bundle, visibility string) {
 		// until the next active-tab post).
 		h.applyDerivedHintsTag("browser_focus bundle=" + bundle)
 	}
-	h.emitEvent("browser.focus_changed", map[string]any{"bundle_id": bundle, "active": true})
 }
 
 // connForAssertedBundleLocked returns the live connection whose OS-asserted
@@ -890,6 +888,7 @@ func (h *Host) ensureSkeleton(pluginID string) {
 // system-wide every time the user released the command key in another app.
 func (h *Host) handleSessionEnded() {
 	h.mu.Lock()
+	pluginID := h.state.PluginID
 	visibility := h.state.HintVisibility
 	browserFocused := h.state.BrowserFocused
 	clientCount := len(h.state.SSEClients)
@@ -906,11 +905,12 @@ func (h *Host) handleSessionEnded() {
 	// browser, and using it as a proxy would re-put the tag into
 	// whatever app the user is currently in.
 	resetHints := visibility == "always" && browserFocused
-	h.emitEvent("browser.session_reset", map[string]any{
-		"hint_visibility": visibility,
-		"reset_hints_tag": resetHints,
-		"sse_clients":     clientCount,
-	})
+	// Every hold's release lands here; with no browser connected nothing was
+	// sent or re-derived, and a line would only be noise.
+	if clientCount > 0 || resetHints {
+		branchkit.Logf(pluginID, "[TAGS] session ended: hint display reset sent to %d connection(s), hints tag re-derive=%v (visibility=%s)",
+			clientCount, resetHints, visibility)
+	}
 
 	if resetHints {
 		h.applyDerivedHintsTag("voice_session_reset")

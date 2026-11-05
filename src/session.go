@@ -205,8 +205,8 @@ func (h *Host) handleSessionPut(_ *http.Request, req *wire.SessionRequest) (wire
 		// being in a browser with media (applySessionLocked).
 		h.state.MediaLastConnID = req.ConnID
 	}
-	// browser.caret_updated is emitted where the tag actually moves
-	// (syncCaretLocked), here or on a later focus gain.
+	// The caret tag moves in syncCaretLocked: here, or on a later focus gain
+	// for a request deferred behind another browser.
 	h.applySessionLocked(pluginID, req.ConnID, "extension_session")
 	h.mu.Unlock()
 	return ack()

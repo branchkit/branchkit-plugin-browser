@@ -113,7 +113,6 @@ func (h *Host) handleRangePickPost(_ *http.Request, req *wire.RangePickRequest) 
 
 	h.mu.Lock()
 	pluginID := h.state.PluginID
-	armed := 0
 	// Every POST logs its outcome — a silent no-op made "the extension never
 	// sent it" indistinguishable from "the plugin turned it down".
 	if len(req.Codewords) == 0 {
@@ -128,7 +127,6 @@ func (h *Host) handleRangePickPost(_ *http.Request, req *wire.RangePickRequest) 
 		h.state.RangePickConnID = req.ConnID
 		h.state.RangePickTabID = req.TabID
 		h.state.RangePickCodewords = set
-		armed = len(set)
 		branchkit.Logf(pluginID, "[TAGS] range pick ARMED conn=%q tab=%d codewords=%v",
 			req.ConnID, req.TabID, req.Codewords)
 		// Fall back to the arming source: focus is routinely unbound right here
@@ -137,11 +135,5 @@ func (h *Host) handleRangePickPost(_ *http.Request, req *wire.RangePickRequest) 
 		h.reprojectSourceLocked(pluginID, req.ConnID, req.TabID)
 	}
 	h.mu.Unlock()
-
-	h.emitEvent("browser.range_pick_updated", map[string]any{
-		"conn_id": req.ConnID,
-		"tab_id":  req.TabID,
-		"armed":   armed,
-	})
 	return ack()
 }

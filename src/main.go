@@ -205,9 +205,6 @@ type PluginState struct {
 	CaretConnID string
 	CaretActive bool
 	CaretTagSet bool
-	// The connection the caret tag was last set for: who browser.caret_updated
-	// names when the tag is released (CaretConnID is cleared before that).
-	CaretTagConnID string
 	// CaretTagUncertain: the last caret tag write timed out, so whether the
 	// platform holds the tag is unknown. See syncCaretLocked.
 	CaretTagUncertain bool

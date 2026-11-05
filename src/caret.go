@@ -79,9 +79,7 @@ func (h *Host) syncCaretLocked(pluginID string) {
 		}
 		h.state.CaretTagSet = true
 		h.state.CaretTagUncertain = false
-		h.state.CaretTagConnID = h.state.CaretConnID
 		branchkit.Logf(pluginID, "[TAGS] caret tag SET conn=%q", h.state.CaretConnID)
-		h.emitCaretUpdatedLocked(h.state.CaretConnID, true)
 	} else if !h.state.CaretActive && (h.state.CaretTagSet || uncertain) {
 		if err := h.deleteCaretTag(pluginID); err != nil {
 			h.state.CaretTagUncertain = uncertain || isCallTimeout(err)
@@ -91,24 +89,7 @@ func (h *Host) syncCaretLocked(pluginID string) {
 		h.state.CaretTagSet = false
 		h.state.CaretTagUncertain = false
 		branchkit.Logf(pluginID, "[TAGS] caret tag CLEARED")
-		h.emitCaretUpdatedLocked(h.state.CaretTagConnID, false)
-		h.state.CaretTagConnID = ""
 	}
-}
-
-// emitCaretUpdatedLocked announces that the caret tag was just taken or
-// released, from the one place either happens: a session asking for it, focus
-// reaching a connection whose session was deferred (focus.go), every drain
-// (unfocus, focus switch, disconnect). It used to be emitted by the session
-// route alone, and for the request rather than the tag, so a caret taken on
-// focus gain or drained by focus was never announced, and a deferred request
-// was announced as a change that had not happened. A notification, not a
-// call, so it is fine under mu, as the tag write itself is. Must hold mu.
-func (h *Host) emitCaretUpdatedLocked(connID string, active bool) {
-	h.emitEvent("browser.caret_updated", map[string]any{
-		"conn_id": connID,
-		"active":  active,
-	})
 }
 
 // isCallTimeout reports whether err is a call that got no answer in time, so

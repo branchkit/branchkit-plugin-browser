@@ -34,9 +34,10 @@ const disconnectNudgeGrace = 10 * time.Second
 // were coming back by itself, it will have done so within this window.
 const coldStartNudgeAllowance = 30 * time.Second
 
-// emitDisconnectNudge is the side-effect half (Warn log + bus event) — a var
-// so tests can capture invocations without an RPC connection, same seam
-// pattern as syncPerPrefix / replaceTabsCollection.
+// emitDisconnectNudge is the logging half (the Warn line and the log line) —
+// a var so tests can capture invocations without an RPC connection, same seam
+// pattern as syncPerPrefix / replaceTabsCollection. The platform hears of the
+// disconnect from the health report fireDisconnectNudge sends beside it.
 func (h *Host) emitDisconnectNudgeDefault(pluginID, bundle string) {
 	// Warn-level so the plugin-logging-v2 threshold cross-posts it into
 	// branchkit.log, right next to the is_browser=false lines it explains.
@@ -49,10 +50,6 @@ func (h *Host) emitDisconnectNudgeDefault(pluginID, bundle string) {
 	branchkit.Logf(pluginID,
 		"[FOCUS] extension disconnected bundle=%q for >%s — %s",
 		bundle, disconnectNudgeGrace, extensionRemedy(bundle))
-	h.emitEvent("browser.extension_disconnected", map[string]any{
-		"bundle_id": bundle,
-		"grace_s":   int(disconnectNudgeGrace / time.Second),
-	})
 }
 
 // reportHealth is a var so tests can capture it without an RPC connection,
