@@ -131,6 +131,7 @@
       "locale"
     ],
     "network": "localhost",
+    "interrupts": true,
     "sockets": {
       "listen": [
         {
