@@ -6,7 +6,7 @@ What an extension and the browser plugin say to each other once paired: every
 route on the plugin's listener, the events on its stream, and the shape of
 each body. How an extension pairs in the first place is in the README.
 
-`WIRE_VERSION`: `6e79aea2462e929a`. The ticket request carries it, and a mismatch is
+`WIRE_VERSION`: `17d56c90f79e3361`. The ticket request carries it, and a mismatch is
 refused (409): the plugin decodes strictly, so any change to a route, field
 or type is a breaking one, and changes the version. A doc edit does not.
 
@@ -537,10 +537,12 @@ export interface ReactivateParams {
 }
 
 /**
- * ReferenceNamesRequest replaces the set of saved reference names voice can
- * match.
+ * ReferenceNamesRequest replaces one connection's set of saved reference
+ * names. Voice can match the union of every live connection's set, so one
+ * browser's names never replace another's.
  */
 export interface ReferenceNamesRequest {
+  conn_id: string;
   names: string[] | null;
 }
 
@@ -845,5 +847,5 @@ export const SYNTHETIC_ACTIONS = [
   'resize_window',
 ] as const;
 
-export const WIRE_VERSION = '6e79aea2462e929a';
+export const WIRE_VERSION = '17d56c90f79e3361';
 ```

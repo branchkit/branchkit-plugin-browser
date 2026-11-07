@@ -19,6 +19,7 @@ func newTestHost() *Host {
 	h.commitVocabulary = func() error { return nil }
 	h.codewords = testCodewords
 	h.replaceTabsCollection = func([]branchkit.CollectionPutEntry) error { return nil }
+	h.replaceRefsCollection = func(string, []branchkit.CollectionPutEntry) error { return nil }
 	h.replacePaletteRows = func([]branchkit.CollectionPutEntry) error { return nil }
 	h.replacePaletteReserves = func([]branchkit.CollectionPutEntry) error { return nil }
 	// A test never presses a real key: a test that wants the press installs

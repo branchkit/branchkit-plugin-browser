@@ -351,19 +351,25 @@ func (h *Host) handlePluginDebugLogPost(_ *http.Request, req *wire.PluginDebugLo
 	return ack()
 }
 
-// handleReferencesPost receives reference names from the extension and updates
-// the voice grammar so "reference <name>" matches saved references.
+// handleReferencesPost receives one browser's saved-reference names and
+// updates the voice grammar so "reference <name>" matches them. `conn_id` is
+// required: the names are kept per connection (references.go), and an
+// unstamped post would share one set across every browser, the
+// last-writer-wins loss the per-connection store exists to prevent.
 func (h *Host) handleReferencesPost(_ *http.Request, req *wire.ReferenceNamesRequest) (wire.Ack, error) {
+	if req.ConnID == "" {
+		return wire.Ack{}, badRequest("missing conn_id")
+	}
 	h.mu.Lock()
 	pluginID := h.state.PluginID
 	h.mu.Unlock()
 
-	if err := h.updateReferenceNames(pluginID, req.Names); err != nil {
+	if err := h.updateReferenceNames(pluginID, req.ConnID, req.Names); err != nil {
 		branchkit.Logf(pluginID, "reference names push failed: %v", err)
 		return wire.Ack{}, statusError(http.StatusBadGateway, "reference push failed")
 	}
 
-	branchkit.Logf(pluginID, "reference names updated: %d names", len(req.Names))
+	branchkit.Logf(pluginID, "reference names updated: conn=%q %d names", req.ConnID, len(req.Names))
 	return ack()
 }
 

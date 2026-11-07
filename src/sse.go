@@ -356,7 +356,7 @@ func (h *Host) alphabetChannel(clientID string) chan []string {
 // disconnectSSEClient tears down one ended stream: its client entry always,
 // and its connection's state only while the stream still owns the conn_id.
 func (h *Host) disconnectSSEClient(pluginID, connID, clientID string) {
-	droppedContrib := false
+	droppedContrib, droppedRefs := false, false
 	var armBundle, armVis, lostBundle string
 	var needsRescan, focusLost, pinCleared bool
 	h.mu.Lock()
@@ -430,6 +430,9 @@ func (h *Host) disconnectSSEClient(pluginID, connID, clientID string) {
 		// re-push happens after the lock is released (pushCommandGroup
 		// takes its own).
 		droppedContrib = h.dropContributedCommands(connID)
+		// Likewise its saved-reference names: the union is republished
+		// after the lock is released.
+		droppedRefs = h.dropReferenceNames(connID)
 		// This conn's frame sessions can never be revived — a reconnect that
 		// is not this same stream's conn_id mints a fresh one — so destroy
 		// them and drain what they projected. Nothing called this before:
@@ -473,6 +476,11 @@ func (h *Host) disconnectSSEClient(pluginID, connID, clientID string) {
 	if droppedContrib {
 		if err := h.pushCommandGroup(pluginID, groupContributed); err != nil {
 			branchkit.Logf(pluginID, "contribute drain: push failed: %v", err)
+		}
+	}
+	if droppedRefs {
+		if err := h.publishReferenceNames(pluginID); err != nil {
+			branchkit.Logf(pluginID, "reference names drain: publish failed: %v", err)
 		}
 	}
 	if needsRescan {

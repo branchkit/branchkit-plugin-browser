@@ -317,10 +317,12 @@ type SetHintDisplayRequest struct {
 
 // --- References ---
 
-// ReferenceNamesRequest replaces the set of saved reference names voice can
-// match.
+// ReferenceNamesRequest replaces one connection's set of saved reference
+// names. Voice can match the union of every live connection's set, so one
+// browser's names never replace another's.
 type ReferenceNamesRequest struct {
-	Names []string `json:"names"`
+	ConnID string   `json:"conn_id"`
+	Names  []string `json:"names"`
 }
 
 // ReferenceSaveRequest saves one reference to the durable collection.

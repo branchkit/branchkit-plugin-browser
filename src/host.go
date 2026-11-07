@@ -34,9 +34,13 @@ type Host struct {
 	codewordsMu    sync.RWMutex
 	codewordMirror *branchkit.CollectionMirror
 
-	// Reference names for the references collection.
+	// Saved-reference names, one set per connection (references.go). Voice
+	// matches their union, so a second browser cannot erase the first's.
 	refNamesMu sync.RWMutex
-	refNames   []string
+	refNames   map[string][]string
+	// Serializes publishing the union, so two connections' posts cannot
+	// write their unions to the collection out of order.
+	refPublishMu sync.Mutex
 
 	// Tab-desk surgery replies awaited by connection.
 	surgeryMu      sync.Mutex
@@ -88,6 +92,7 @@ type Host struct {
 	replaceHintRPC          func(collName string, entries []branchkit.CollectionPutEntry, roles map[string]branchkit.FieldDisplay) error
 	replacePaletteReserves  func(records []branchkit.CollectionPutEntry) error
 	replacePaletteRows      func(records []branchkit.CollectionPutEntry) error
+	replaceRefsCollection   func(pluginID string, records []branchkit.CollectionPutEntry) error
 	replaceTabsCollection   func(records []branchkit.CollectionPutEntry) error
 	reportProblem           func(p actionProblem)
 	publishProblemDoc       func(doc branchkit.OutputState) error
@@ -106,6 +111,7 @@ func newHost(p *branchkit.Plugin) *Host {
 		plugin:         p,
 		calibration:    &calibrationFixture{},
 		contributed:    map[string]connCatalog{},
+		refNames:       map[string][]string{},
 		surgeryWaiters: map[string]chan surgeryReply{},
 	}
 	h.commitVocabulary = h.commitVocabularyDefault
@@ -142,6 +148,7 @@ func newHost(p *branchkit.Plugin) *Host {
 	h.replaceHintRPC = h.replaceHintRPCDefault
 	h.replacePaletteReserves = h.replacePaletteReservesDefault
 	h.replacePaletteRows = h.replacePaletteRowsDefault
+	h.replaceRefsCollection = h.replaceRefsCollectionDefault
 	h.replaceTabsCollection = h.replaceTabsCollectionDefault
 	h.reportProblem = h.reportProblemDefault
 	h.publishProblemDoc = h.publishProblemDocDefault
