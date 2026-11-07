@@ -569,3 +569,37 @@ func TestAlphabetSwapLeavesADroppedIframeDropped(t *testing.T) {
 		t.Errorf("after the swap the dropped iframe came back: hints_bat_strict = %v", got)
 	}
 }
+
+// An armed range-pick whose chips live in an iframe gone quiet past the TTL,
+// beside a live top frame the pick filters out: the projection is the chips,
+// kept by the empty-source guard, and an alphabet change must move them to
+// the new words.
+func TestAlphabetSwapReprojectsChipsInAnIdleIframe(t *testing.T) {
+	h, pushes, _ := newDriftHost(t)
+	h.applyAlphabet(alphabetOne)
+	putFrame(t, h, letterFrame(0, []string{"c d"}, "c d"))
+	putFrame(t, h, letterFrame(5, []string{"a b"}, "a b"))
+	w := httptest.NewRecorder()
+	serveRoute(h, w, httptest.NewRequest(http.MethodPost, "/range-pick",
+		strings.NewReader(`{"conn_id":"chrome","tab_id":7,"codewords":["a b"]}`)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("/range-pick status %d", w.Code)
+	}
+	h.mu.Lock()
+	h.state.FrameSessions[frameKey{ConnID: "chrome", TabID: driftTab, FrameID: 5}].LastBatchAt =
+		time.Now().Add(-2 * staleFrameSessionTTL)
+	h.mu.Unlock()
+	h.sweepStaleFrameSessionsOnce(time.Now())
+	if got := hintEntries(pushes, "arch", true); !mapsEqual(got, setOf("bat")) {
+		t.Fatalf("setup: the guard must keep the chip projected, hints_arch_strict = %v", got)
+	}
+
+	h.applyAlphabet(alphabetTwo)
+	// alphabetTwo: a=bat b=arch.
+	if got := hintEntries(pushes, "bat", true); !mapsEqual(got, setOf("arch")) {
+		t.Errorf("after the swap the chip: hints_bat_strict = %v, want {arch}", got)
+	}
+	if got := hintEntries(pushes, "arch", true); len(got) != 0 {
+		t.Errorf("after the swap the old hints_arch_strict still holds %v", got)
+	}
+}

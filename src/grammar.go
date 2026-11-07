@@ -119,15 +119,16 @@ func (h *Host) applyAlphabet(updated [26]string) {
 // clears every prefix the platform still holds that the new projection does
 // not name.
 //
-// When every hint-holding frame of the source is past the stale TTL (an idle
-// iframe holding a page's only hints), the empty-source guard has kept their
-// old words projected, and their badges show the new words; the rebuild would
-// be empty and skipped, leaving those words unmatchable until the page
-// changed. Only then are the source's sessions revived first, as on a focus
-// return: a frame that is really gone ages out again after the TTL and the
-// next sweep, and the guard then keeps the new-word projection. A source
-// with a live frame is rebuilt as it stands, so a dormant iframe the sweeper
-// already dropped stays dropped.
+// When the source would build an empty projection (every frame that holds
+// hints is past the stale TTL, or an armed range-pick's chips live only in
+// such a frame), the empty-source guard has kept their old words projected
+// while their badges show the new words; the rebuild would be skipped,
+// leaving those words unmatchable until the page changed. Only then are the
+// source's sessions revived first, as on a focus return. A source that builds
+// something is rebuilt as it stands, so a dormant iframe the sweeper already
+// dropped beside a live frame stays dropped. (In the all-empty case the
+// revive cannot tell a frame the guard kept from one dropped earlier, and
+// re-arms both.)
 //
 // Not during a calibration trial: the fixture owns the collections then and
 // rehydrates itself on a retune (applyHintsFixture); releasing it reprojects.
@@ -148,22 +149,10 @@ func (h *Host) reprojectForAlphabetLocked() {
 	if conn == "" || tab == 0 {
 		return
 	}
-	if !h.sourceHasFreshGrammarLocked(conn, tab, time.Now()) {
+	if full, _ := h.buildTabPrefixState(conn, tab); len(full) == 0 {
 		h.reviveTabSessionsLocked(conn, tab)
 	}
 	h.reprojectSourceLocked(h.state.PluginID, conn, tab)
-}
-
-// sourceHasFreshGrammarLocked reports whether some frame of (conn, tab) holds
-// codewords and is inside the stale TTL: whether buildTabPrefixState has
-// anything to build from. Caller holds mu.
-func (h *Host) sourceHasFreshGrammarLocked(conn string, tab int, now time.Time) bool {
-	for key, sess := range h.state.FrameSessions {
-		if key.ConnID == conn && key.TabID == tab && len(sess.Codewords) > 0 && !frameSessionStale(key, sess, now) {
-			return true
-		}
-	}
-	return false
 }
 
 // pushSealedAlpha maintains `browser_alpha` — the browser-owned sealed
