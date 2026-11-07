@@ -116,9 +116,11 @@ func (h *Host) applyHintsFixture(pluginID string) (string, error) {
 	}
 
 	// 2. For each of 26 prefixes, sync the per-prefix collection
-	//    containing all 26 suffix codewords with synthetic payloads
-	//    matching the shape the activate command's action template
-	//    references (letter / id / frame_id / codeword / type).
+	//    containing all 26 suffix codewords with synthetic payloads in
+	//    the live element payload's shape (validateGrammarElement). Of
+	//    those fields the activate command binds only letter and
+	//    codeword; id / frame_id / type are diagnostic placeholders
+	//    (see hintSuffixRoles).
 	for prefixIdx, prefixWord := range words {
 		suffixData := make(map[string]any, 26)
 		for suffixIdx, suffixWord := range words {

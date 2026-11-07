@@ -48,10 +48,21 @@ func frameSessionStale(key frameKey, sess *FrameSession, now time.Time) bool {
 }
 
 // hintSuffixRoles is the display-role declaration for per-prefix hint
-// collections (`browser_hints_<X>`). Each entry's value is the full
-// payload object (id, frame_id, codeword, etc.); `letter` is what the
-// discovery HUD wants as the subtitle, and the rest carry no display
-// meaning.
+// collections (`browser_hints_<X>` and their `_strict` companions). Each
+// entry's value is the full payload object (letter, codeword, id,
+// frame_id, type); `letter` is what the discovery HUD wants as the
+// subtitle, and the rest carry no display meaning.
+//
+// Only `letter` and `codeword` are read by a command: activate and the
+// contributed hint verbs bind {prefix,suffix}.{letter,codeword} into
+// their params (sealedHintFields, collections.go), and the extension
+// resolves the letters to an element at dispatch time. `id`, `frame_id`
+// and `type` are diagnostic only: no action routes by them, and no code
+// path in this plugin or the extension resolves an element from them.
+// They stay in the payload because these are platform collections
+// another plugin may be granted, and a reader there may want to see which
+// element and frame a codeword named when it was published. Do not build
+// routing on them: the codeword's letters are the address.
 var hintSuffixRoles = map[string]branchkit.FieldDisplay{
 	"letter":   branchkit.FieldDisplaySecondary,
 	"id":       branchkit.FieldDisplayPayload,
@@ -839,8 +850,9 @@ func (h *Host) buildTabPrefixState(connID string, tabID int) (full, strict map[s
 			// the hybrid activate's WORD_TO_LETTER dispatch gets "flag same"/"fs"
 			// and clicks nothing. Override to the second word + its letter (the
 			// hint is prefixLetter+suffixLetter, each one char, so drop the
-			// leading prefix letter). id/frame_id/type stay for id resolution +
-			// HUD payload. (2026-08-08, fixes the hybrid dispatch regression.)
+			// leading prefix letter). id/frame_id/type stay as diagnostic
+			// payload (see hintSuffixRoles); nothing resolves by them.
+			// (2026-08-08, fixes the hybrid dispatch regression.)
 			converted["codeword"] = suffix
 			if pl, ok := converted["letter"].(string); ok && len(pl) >= 2 {
 				converted["letter"] = pl[1:]
