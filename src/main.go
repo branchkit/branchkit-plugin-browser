@@ -240,7 +240,8 @@ type PluginState struct {
 	// disambiguation chips own the hint codewords in ONE (conn, tab), and
 	// buildTabPrefixState projects only these — so the Discovery HUD shows the
 	// chips instead of the whole page's hints. Not a tag: the narrow covers
-	// hint codewords only, not the whole command set. Nil/empty = unarmed.
+	// hint codewords only, not the whole command set. Keyed by letter token
+	// ("a b"), like FrameSession.Codewords. Nil/empty = unarmed.
 	RangePickConnID    string
 	RangePickTabID     int
 	RangePickCodewords map[string]bool

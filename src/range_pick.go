@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/branchkit/branchkit-plugin-browser/wire"
 	"github.com/branchkit/plugin-sdk-go"
@@ -120,9 +121,12 @@ func (h *Host) handleRangePickPost(_ *http.Request, req *wire.RangePickRequest) 
 			req.ConnID, req.TabID, len(h.state.RangePickCodewords) > 0)
 		h.drainRangePickLocked(pluginID, "extension_release")
 	} else {
+		// Letter tokens, the form the frame sessions store, so the narrow
+		// compares letters with letters and an alphabet change mid-pick
+		// reprojects the chips under the new words with nothing resent.
 		set := make(map[string]bool, len(req.Codewords))
 		for _, cw := range req.Codewords {
-			set[cw] = true
+			set[strings.Join(strings.Fields(cw), " ")] = true
 		}
 		h.state.RangePickConnID = req.ConnID
 		h.state.RangePickTabID = req.TabID

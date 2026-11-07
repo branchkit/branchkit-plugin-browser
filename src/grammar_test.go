@@ -471,3 +471,21 @@ func TestBuildAllHintCommandsHybridActivate(t *testing.T) {
 		}
 	}
 }
+
+// lt is a spoken test codeword in letters, the form the extension sends and
+// the frame sessions store ("arch bake" -> "a b"), under testCodewords. A word
+// testCodewords does not hold stands for its first letter.
+func lt(spoken string) string {
+	parts := strings.Fields(spoken)
+	for i, p := range parts {
+		letter := p[:1]
+		for j, w := range testCodewords {
+			if w == p {
+				letter = string(rune('a' + j))
+				break
+			}
+		}
+		parts[i] = letter
+	}
+	return strings.Join(parts, " ")
+}

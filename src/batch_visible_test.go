@@ -153,9 +153,9 @@ func TestAdoptFocusedTabFromBatch(t *testing.T) {
 
 	// Tab 1 is focused and projected; tab 2 has stored (background) grammar.
 	tab1 := h.ensureFrameSession(frameKey{ConnID: "conn-a", TabID: 1, FrameID: 0})
-	tab1.Codewords["arch bake"] = map[string]string{"id": "1", "codeword": "arch bake"}
+	tab1.Codewords[lt("arch bake")] = map[string]string{"id": "1", "codeword": "arch bake"}
 	tab2 := h.ensureFrameSession(frameKey{ConnID: "conn-a", TabID: 2, FrameID: 0})
-	tab2.Codewords["cape dart"] = map[string]string{"id": "2", "codeword": "cape dart"}
+	tab2.Codewords[lt("song under")] = map[string]string{"id": "2", "codeword": "song under"}
 	// Tab 2 aged in the background past the dormant TTL — revive must un-park it.
 	tab2.LastBatchAt = time.Now().Add(-2 * staleFrameSessionTTL)
 	tab2.SweptStale = true
@@ -182,8 +182,8 @@ func TestAdoptFocusedTabFromBatch(t *testing.T) {
 	if len(pushes["plugin.browser.hints_arch"]) != 0 {
 		t.Errorf("old tab 1 must be deprojected, arch still has %v", pushes["plugin.browser.hints_arch"])
 	}
-	if _, ok := pushes["plugin.browser.hints_cape"]["dart"]; !ok {
-		t.Errorf("adopted tab 2 must be reprojected, got %v", pushes["plugin.browser.hints_cape"])
+	if _, ok := pushes["plugin.browser.hints_song"]["under"]; !ok {
+		t.Errorf("adopted tab 2 must be reprojected, got %v", pushes["plugin.browser.hints_song"])
 	}
 	// Tab 1's session survives (parked) for a zero-traffic switch-back.
 	if s := h.state.FrameSessions[frameKey{ConnID: "conn-a", TabID: 1, FrameID: 0}]; s == nil || len(s.Codewords) != 1 {

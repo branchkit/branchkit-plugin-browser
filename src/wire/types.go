@@ -37,8 +37,10 @@ type GrammarElement struct {
 	ID int `json:"id"`
 	// The scanner's element type ("link", "button", "record_action", ...).
 	Type string `json:"type"`
-	// The two-word spoken codeword ("arch bake").
-	Codeword string `json:"codeword"`
+	// The codeword in letters ("a b"): the extension's own identity for the
+	// hint. The plugin stores it and projects the spoken words ("arch bake")
+	// with its own alphabet, so an alphabet change needs nothing resent.
+	Codeword string `json:"codeword" ts:"LetterToken"`
 	// The element intersects the strict viewport at send time: only these
 	// enter the `_strict` companion collection (the Discovery HUD and the
 	// activate command's capture). Band-only entries are painted, not matchable.
@@ -70,9 +72,10 @@ type GrammarFrameRequest struct {
 	Elements       []GrammarElement `json:"elements"`
 }
 
-// GrammarFailure says why one element was not stored.
+// GrammarFailure says why one element was not stored. Codeword is the
+// element's letter token, as it was sent.
 type GrammarFailure struct {
-	Codeword string `json:"codeword"`
+	Codeword string `json:"codeword" ts:"LetterToken"`
 	Reason   string `json:"reason"`
 }
 
@@ -101,11 +104,13 @@ type HintsSessionEndRequest struct {
 }
 
 // RangePickRequest arms (codewords) or releases (empty) the disambiguation
-// chip window: while armed the hint projection narrows to the chips.
+// chip window: while armed the hint projection narrows to the chips. The
+// codewords are letter tokens, compared with the frames' stored letters, so
+// an alphabet change mid-pick keeps the narrow.
 type RangePickRequest struct {
 	ConnID    string   `json:"conn_id"`
 	TabID     int      `json:"tab_id"`
-	Codewords []string `json:"codewords"`
+	Codewords []string `json:"codewords" ts:"LetterToken[]"`
 }
 
 // --- Dispatch outcomes ---

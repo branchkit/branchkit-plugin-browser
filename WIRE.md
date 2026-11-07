@@ -6,7 +6,7 @@ What an extension and the browser plugin say to each other once paired: every
 route on the plugin's listener, the events on its stream, and the shape of
 each body. How an extension pairs in the first place is in the README.
 
-`WIRE_VERSION`: `4558aa8c2ddc3c57`. The ticket request carries it, and a mismatch is
+`WIRE_VERSION`: `6e79aea2462e929a`. The ticket request carries it, and a mismatch is
 refused (409): the plugin decodes strictly, so any change to a route, field
 or type is a breaking one, and changes the version. A doc edit does not.
 
@@ -99,7 +99,7 @@ BranchKit extension builds against):
 /** When hint badges show: always, or on demand. */
 export type HintVisibility = 'always' | 'manual';
 
-/** A hint codeword in letters, space-separated: 'c g' for a pair, 'c' for one letter. The plugin translates spoken words to letters with its own alphabet before an action leaves it. */
+/** A hint codeword in letters, space-separated: 'c g' for a pair, 'c' for one letter. Hints cross the wire in letters both ways: the plugin projects spoken words from them with its own alphabet. */
 export type LetterToken = string;
 
 /**
@@ -291,8 +291,12 @@ export interface GrammarElement {
   id: number;
   /** The scanner's element type ("link", "button", "record_action", ...). */
   type: string;
-  /** The two-word spoken codeword ("arch bake"). */
-  codeword: string;
+  /**
+   * The codeword in letters ("a b"): the extension's own identity for the
+   * hint. The plugin stores it and projects the spoken words ("arch bake")
+   * with its own alphabet, so an alphabet change needs nothing resent.
+   */
+  codeword: LetterToken;
   /**
    * The element intersects the strict viewport at send time: only these
    * enter the `_strict` companion collection (the Discovery HUD and the
@@ -301,9 +305,12 @@ export interface GrammarElement {
   in_strict_viewport?: boolean;
 }
 
-/** GrammarFailure says why one element was not stored. */
+/**
+ * GrammarFailure says why one element was not stored. Codeword is the
+ * element's letter token, as it was sent.
+ */
 export interface GrammarFailure {
-  codeword: string;
+  codeword: LetterToken;
   reason: string;
 }
 
@@ -509,12 +516,14 @@ export interface QueryWindowsParams {
 
 /**
  * RangePickRequest arms (codewords) or releases (empty) the disambiguation
- * chip window: while armed the hint projection narrows to the chips.
+ * chip window: while armed the hint projection narrows to the chips. The
+ * codewords are letter tokens, compared with the frames' stored letters, so
+ * an alphabet change mid-pick keeps the narrow.
  */
 export interface RangePickRequest {
   conn_id: string;
   tab_id: number;
-  codewords: string[] | null;
+  codewords: LetterToken[];
 }
 
 /**
@@ -836,5 +845,5 @@ export const SYNTHETIC_ACTIONS = [
   'resize_window',
 ] as const;
 
-export const WIRE_VERSION = '4558aa8c2ddc3c57';
+export const WIRE_VERSION = '6e79aea2462e929a';
 ```

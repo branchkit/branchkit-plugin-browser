@@ -445,8 +445,11 @@ type FrameSession struct {
 	// predecessor's late disconnect and must not tear this session down
 	// (the doc-identity fence in handleHintsSessionEndPost).
 	DocID string
-	// codeword → element payload (id, letter, type, frame_id, codeword):
-	// exactly the frame's last request, validated.
+	// Letter token ("a b") → element payload (id, letter, type, frame_id):
+	// exactly the frame's last request, validated. Stored in letters, the
+	// extension's own identity for a hint; the spoken words are projected
+	// from them with the alphabet current at projection time (tokenWords),
+	// so an alphabet change reprojects what is stored and nothing is resent.
 	Codewords map[string]map[string]string
 	// Subset of Codewords whose element was in the strict viewport at
 	// last request. Drives the `_strict` companion collections; band-only
@@ -476,33 +479,73 @@ type (
 	GrammarFrameResponse = wire.GrammarFrameResponse
 )
 
-// validateGrammarElement runs the per-element validation chain and
-// builds the Put payload. Pure — no RPC — so it's directly testable
-// without a platform connection. Returns a non-empty failReason if
-// the element should be skipped; otherwise prefix/suffix/payload are
-// what `plugin.Put` should receive.
-func validateGrammarElement(e GrammarElement, frameID int, words [26]string) (prefix, suffix string, payload map[string]string, failReason string) {
-	codeword := strings.TrimSpace(e.Codeword)
-	if codeword == "" {
-		return "", "", nil, "empty_codeword"
+// validateGrammarElement runs the per-element validation chain and builds
+// the stored payload. Pure — no RPC, no alphabet — so it's directly testable
+// without a platform connection. The element's codeword is a letter token
+// ("a b"); token is its normalized form, the session key. Returns a non-empty
+// failReason if the element should be skipped.
+//
+// The alphabet is deliberately not consulted: the letters are stored as they
+// came and the spoken words are projected later (tokenWords), so a frame sent
+// before the alphabet loads, or across a swap, is still whole.
+func validateGrammarElement(e GrammarElement, frameID int) (token string, payload map[string]string, failReason string) {
+	parts := strings.Fields(e.Codeword)
+	if len(parts) == 0 {
+		return "", nil, "empty_codeword"
 	}
-	parts := strings.Fields(codeword)
 	if len(parts) != 2 {
-		// All hints are uniform two-word pairs (extension's label-pool.ts
+		// All hints are uniform two-letter pairs (extension's label-pool.ts
 		// buildPool comment); anything else is malformed.
-		return "", "", nil, "invalid_codeword_parts"
+		return "", nil, "invalid_codeword_parts"
 	}
-	letter := codewordToLetter(codeword, words)
-	if letter == "" {
-		return "", "", nil, "codeword_not_in_alphabet"
+	for _, p := range parts {
+		if len(p) != 1 || p[0] < 'a' || p[0] > 'z' {
+			return "", nil, "not_a_letter"
+		}
 	}
-	return parts[0], parts[1], map[string]string{
-		"letter":   letter,
+	return parts[0] + " " + parts[1], map[string]string{
+		"letter":   parts[0] + parts[1],
 		"id":       strconv.Itoa(e.ID),
 		"frame_id": strconv.Itoa(frameID),
-		"codeword": codeword,
 		"type":     e.Type,
 	}, ""
+}
+
+// tokenWords projects a stored letter token ("a b") to its spoken prefix and
+// suffix words under words ("arch", "bake"). ok is false when the token is not
+// a letter pair or a letter has no word yet (an alphabet still loading): such
+// an entry is held, not projected, until an alphabet that names it arrives.
+func tokenWords(token string, words [26]string) (prefix, suffix string, ok bool) {
+	if len(token) != 3 || token[1] != ' ' {
+		return "", "", false
+	}
+	p, q := int(token[0])-'a', int(token[2])-'a'
+	if p < 0 || p >= 26 || q < 0 || q >= 26 {
+		return "", "", false
+	}
+	prefix, suffix = words[p], words[q]
+	if prefix == "" || suffix == "" {
+		return "", "", false
+	}
+	return prefix, suffix, true
+}
+
+// addPrefixWords adds the spoken prefix of every stored token to set, under
+// words: the prefix collections those tokens project into.
+func addPrefixWords(set map[string]bool, codewords map[string]map[string]string, words [26]string) {
+	for token := range codewords {
+		if prefix, _, ok := tokenWords(token, words); ok {
+			set[prefix] = true
+		}
+	}
+}
+
+// currentWords is the alphabet installed now. Taken under codewordsMu, which
+// nests inside mu (never the other way round), so callers may hold mu.
+func (h *Host) currentWords() [26]string {
+	h.codewordsMu.RLock()
+	defer h.codewordsMu.RUnlock()
+	return h.codewords
 }
 
 // ensureFrameSession returns the FrameSession for key, allocating it on the
@@ -539,12 +582,7 @@ func (h *Host) cleanupFrameSessionLocked(pluginID string, key frameKey, session 
 	// to re-sync. After the caller drops this session, the rebuild
 	// for these prefixes will reflect the absence of these entries.
 	affectedPrefixes := make(map[string]bool)
-	for codeword := range session.Codewords {
-		parts := strings.Fields(codeword)
-		if len(parts) == 2 {
-			affectedPrefixes[parts[0]] = true
-		}
-	}
+	addPrefixWords(affectedPrefixes, session.Codewords, h.currentWords())
 	count := len(session.Codewords)
 	session.Codewords = make(map[string]map[string]string)
 	session.StrictCodewords = make(map[string]bool)
@@ -643,6 +681,7 @@ func (h *Host) cleanupTabSessionsLocked(pluginID, connID string, tabID int, reas
 func (h *Host) deprojectTabSessionsLocked(pluginID, connID string, tabID int, reason string) int {
 	count := 0
 	affectedPrefixes := make(map[string]bool)
+	words := h.currentWords()
 	for key, sess := range h.state.FrameSessions {
 		if key.ConnID != connID || key.TabID != tabID {
 			continue
@@ -651,12 +690,7 @@ func (h *Host) deprojectTabSessionsLocked(pluginID, connID string, tabID int, re
 		// Park it the way the sweeper does: excluded from re-sweeps; the
 		// next batch arrival or focus revival clears the flag.
 		sess.SweptStale = true
-		for codeword := range sess.Codewords {
-			parts := strings.Fields(codeword)
-			if len(parts) == 2 {
-				affectedPrefixes[parts[0]] = true
-			}
-		}
+		addPrefixWords(affectedPrefixes, sess.Codewords, words)
 	}
 	if count == 0 {
 		return 0
@@ -735,6 +769,7 @@ func (h *Host) cleanupConnSessionsLocked(pluginID, connID, reason string) int {
 func (h *Host) parkConnSessionsLocked(pluginID, connID string) int {
 	count := 0
 	affectedPrefixes := make(map[string]bool)
+	words := h.currentWords()
 	for key, sess := range h.state.FrameSessions {
 		if key.ConnID != connID {
 			continue
@@ -743,12 +778,7 @@ func (h *Host) parkConnSessionsLocked(pluginID, connID string) int {
 		// Parked the way the sweeper parks: excluded from re-sweeps; the
 		// next batch arrival or focus revival clears the flag.
 		sess.SweptStale = true
-		for codeword := range sess.Codewords {
-			parts := strings.Fields(codeword)
-			if len(parts) == 2 {
-				affectedPrefixes[parts[0]] = true
-			}
-		}
+		addPrefixWords(affectedPrefixes, sess.Codewords, words)
 	}
 	if count == 0 {
 		return 0
@@ -816,6 +846,7 @@ func (h *Host) buildTabPrefixState(connID string, tabID int) (full, strict map[s
 	// this tab, the chips own the codewords — project ONLY them, so the
 	// Discovery HUD advertises exactly what the extension will accept.
 	pickFilter := h.rangePickFilterLocked(connID, tabID)
+	words := h.currentWords()
 	for key, sess := range h.state.FrameSessions {
 		if key.ConnID != connID || key.TabID != tabID {
 			continue
@@ -829,23 +860,24 @@ func (h *Host) buildTabPrefixState(connID string, tabID int) (full, strict map[s
 		if frameSessionStale(key, sess, now) {
 			continue
 		}
-		for codeword, payload := range sess.Codewords {
-			if pickFilter != nil && !pickFilter[codeword] {
+		for token, payload := range sess.Codewords {
+			if pickFilter != nil && !pickFilter[token] {
 				continue
 			}
-			parts := strings.Fields(codeword)
-			if len(parts) != 2 {
+			// The spoken words come from the alphabet installed now: the
+			// session holds letters, so a swap reprojects with no resend.
+			prefix, suffix, ok := tokenWords(token, words)
+			if !ok {
 				continue
 			}
-			prefix, suffix := parts[0], parts[1]
 			converted := make(map[string]any, len(payload))
 			for k, v := range payload {
 				converted[k] = v
 			}
 			// A per-prefix collection is a SUFFIX menu: its entry KEY is the
 			// suffix codeword, so its fields must be the SUFFIX's own. The
-			// element payload carries the FULL pair (letter "fs", codeword
-			// "flag same"); leaving those in makes a dependent-capture match
+			// element payload carries the FULL pair's letters ("fs"); leaving
+			// those (or the pair's words) in makes a dependent-capture match
 			// resolve {suffix.codeword}/{suffix.letter} to the whole pair, so
 			// the hybrid activate's WORD_TO_LETTER dispatch gets "flag same"/"fs"
 			// and clicks nothing. Override to the second word + its letter (the
@@ -863,7 +895,7 @@ func (h *Host) buildTabPrefixState(connID string, tabID int) (full, strict map[s
 				full[prefix] = bucket
 			}
 			bucket[suffix] = converted
-			if sess.StrictCodewords[codeword] {
+			if sess.StrictCodewords[token] {
 				sbucket, sok := strict[prefix]
 				if !sok {
 					sbucket = make(map[string]any)
@@ -1076,6 +1108,8 @@ type frameCommit struct {
 	project          bool
 	projConn         string
 	projTab          int
+	// The alphabet the affected prefixes were named under.
+	words [26]string
 }
 
 // handleGrammarFramePut receives one frame's whole grammar from the extension.
@@ -1327,29 +1361,26 @@ func (h *Host) commitGrammarFrame(req *GrammarFrameRequest, adm frameAdmission, 
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for cw := range session.Codewords {
-		if parts := strings.Fields(cw); len(parts) == 2 {
-			affectedPrefixes[parts[0]] = true
-		}
-	}
+	addPrefixWords(affectedPrefixes, session.Codewords, words)
 	codewords := make(map[string]map[string]string, len(req.Elements))
 	strict := make(map[string]bool)
 	var drops hintDrops
 	defer func() { drops.log(adm.pluginID, req.TabID, req.FrameID) }()
 	for _, e := range req.Elements {
-		prefix, suffix, payload, failReason := validateGrammarElement(e, req.FrameID, words)
+		token, payload, failReason := validateGrammarElement(e, req.FrameID)
 		if failReason != "" {
 			drops.add(failReason, e.Codeword)
 			failed = append(failed, GrammarFailure{Codeword: e.Codeword, Reason: failReason})
 			continue
 		}
-		codeword := prefix + " " + suffix
-		codewords[codeword] = payload
+		codewords[token] = payload
 		if e.InStrictViewport {
-			strict[codeword] = true
+			strict[token] = true
 		}
-		succeeded = append(succeeded, codeword)
-		affectedPrefixes[prefix] = true
+		succeeded = append(succeeded, token)
+		if prefix, _, ok := tokenWords(token, words); ok {
+			affectedPrefixes[prefix] = true
+		}
 	}
 	session.Codewords = codewords
 	session.StrictCodewords = strict
@@ -1363,6 +1394,7 @@ func (h *Host) commitGrammarFrame(req *GrammarFrameRequest, adm frameAdmission, 
 		project:          adm.isFocusedSource,
 		projConn:         adm.projConn,
 		projTab:          adm.projTab,
+		words:            words,
 	}
 }
 
@@ -1459,9 +1491,8 @@ func (h *Host) rollbackFailedPrefixes(session *FrameSession, pushFailures map[st
 	defer h.mu.Unlock()
 	survivingSucceeded := commit.succeeded[:0]
 	for _, cw := range commit.succeeded {
-		parts := strings.Fields(cw)
-		if len(parts) == 2 {
-			if err, fail := pushFailures[parts[0]]; fail {
+		if prefix, _, ok := tokenWords(cw, commit.words); ok {
+			if err, fail := pushFailures[prefix]; fail {
 				delete(session.Codewords, cw)
 				delete(session.StrictCodewords, cw)
 				commit.failed = append(commit.failed, GrammarFailure{

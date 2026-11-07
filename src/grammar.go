@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/branchkit/plugin-sdk-go"
 )
@@ -46,19 +47,20 @@ func (h *Host) initCodewordMirror() {
 }
 
 // applyAlphabet installs a decoded alphabet as the plugin's codewords and,
-// when it changed, pushes it to every open stream as an `alphabet` event —
-// the connect-time event, re-sent. Without the push a connected extension
-// kept translating hint letters with the old words until it reconnected, and
-// the plugin dropped those codewords as codeword_not_in_alphabet. The push is
-// also what re-requests the frames sent under the old words: the extension
-// stores a changed alphabet, and every content script answers that storage
-// change by relabelling and re-sending its frame's grammar (resyncFrame,
-// reason alphabet_change). No `reactivate` with it: the plugin's frame
-// sessions are intact, and reactivate reaches only the active tab.
+// when it changed, does two things:
 //
-// Codewords are installed before the push, so a grammar re-sent under the new
-// words validates against them. A half-loaded alphabet (blank slots) is never
-// pushed, as at connect (snapshotCodewords).
+//   - reprojects the hint collections from the frames' stored letters under
+//     the new words (reprojectForAlphabetLocked). Frames hold letter tokens,
+//     never words, so this is the whole of an alphabet swap for the grammar:
+//     the extension resends nothing, and a codeword painted before the swap
+//     resolves under the new words at once.
+//   - pushes it to every open stream as an `alphabet` event, the connect-time
+//     event re-sent, so badges that show spoken words (and the help overlay)
+//     show the new ones.
+//
+// A half-loaded alphabet (blank slots) is never pushed, as at connect
+// (snapshotCodewords), and never reprojected: a blank word would drop its
+// letters' entries from the collections until the rest arrived.
 func (h *Host) applyAlphabet(updated [26]string) {
 	h.codewordsMu.Lock()
 	changed := h.codewords != updated
@@ -72,10 +74,11 @@ func (h *Host) applyAlphabet(updated [26]string) {
 		return
 	}
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.state == nil {
+		h.mu.Unlock()
 		return
 	}
+	h.reprojectForAlphabetLocked()
 	for _, ch := range h.state.SSEAlphabet {
 		// Latest wins: replace an undelivered older alphabet. Only this
 		// function sends, under mu, so the drain cannot race another send.
@@ -85,6 +88,45 @@ func (h *Host) applyAlphabet(updated [26]string) {
 		}
 		ch <- words
 	}
+	dirty := h.state.HintVocabularyDirty
+	h.state.HintVocabularyDirty = false
+	pluginID := h.state.PluginID
+	h.mu.Unlock()
+	if dirty {
+		// The prefix and suffix collections now hold the new words: the
+		// recognizer's union must hear them.
+		h.scheduleVocabularyCommit(pluginID)
+	}
+}
+
+// reprojectForAlphabetLocked rebuilds the hint collections after an alphabet
+// change: the focused source, or, before focus is bound (a lone browser at
+// cold start, a fresh service worker), the source whose grammar arrived last,
+// which is what that window projected (projectionSourceLocked's fallback).
+// The old words' collections go with the rebuild: reprojectSourceLocked
+// clears every prefix the platform still holds that the new projection does
+// not name.
+//
+// Not during a calibration trial: the fixture owns the collections then and
+// rehydrates itself on a retune (applyHintsFixture); releasing it reprojects.
+// Caller holds mu.
+func (h *Host) reprojectForAlphabetLocked() {
+	if h.calibration.IsActive() {
+		return
+	}
+	conn, tab := h.projectionSourceLocked("", 0)
+	if conn == "" || tab == 0 {
+		var newest time.Time
+		for key, sess := range h.state.FrameSessions {
+			if len(sess.Codewords) > 0 && sess.LastBatchAt.After(newest) {
+				newest, conn, tab = sess.LastBatchAt, key.ConnID, key.TabID
+			}
+		}
+	}
+	if conn == "" || tab == 0 {
+		return
+	}
+	h.reprojectSourceLocked(h.state.PluginID, conn, tab)
 }
 
 // pushSealedAlpha maintains `browser_alpha` — the browser-owned sealed
@@ -124,7 +166,7 @@ func (h *Host) pushSealedAlpha(data []struct {
 
 // refreshCodewords forces a synchronous alphabet refetch for call sites
 // that need freshness at a specific moment (mid-walk retune pickup, SSE
-// cold start, per-batch validation). No-op when the mirror isn't wired
+// cold start, per-batch projection). No-op when the mirror isn't wired
 // (tests). An unpopulated store is the mirror's silent boot-race no-op.
 func (h *Host) refreshCodewords() {
 	if h.codewordMirror == nil {
@@ -154,10 +196,10 @@ func (h *Host) snapshotCodewords() []string {
 
 // --- Codeword → letter mapping ---
 //
-// Codewords arrive from the extension as full strings ("arch", "zoo arch").
-// The collection-key flow uses short letter codes ("a", "za") for compactness
-// and as part of action params. This helper maps spoken codewords back to
-// letters by looking up each word's index in the alphabet.
+// Hints arrive from the extension in letters and are stored that way
+// (validateGrammarElement); the collections are keyed by spoken words. This
+// helper goes the other way where only a word is at hand: the prefix list's
+// letter subtitle, named from its prefix word.
 
 // codewordToLetter maps a spoken codeword to its short letter form. "arch"
 // becomes "a"; "zoo arch" becomes "za". Returns "" if any word in the
@@ -187,11 +229,12 @@ func codewordToLetter(codeword string, words [26]string) string {
 // --- Letters on the wire (actions) ---
 //
 // The extension keys hints on letter tokens ("c g" for a pair, "c" for one
-// letter); spoken words are this plugin's business. So every action leaves on
-// the stream in letters: inLetters rewrites the hint params of an outgoing
-// event with the alphabet installed now, the one whose words the command just
-// matched. An alphabet swap therefore needs nothing from the extension for
-// actions: the next action is translated under the new words.
+// letter); spoken words are this plugin's business. A frame's grammar and a
+// range-pick arrive in letters and are projected to words here (batch.go
+// tokenWords), and every action leaves on the stream in letters: inLetters
+// rewrites the hint params of an outgoing event with the alphabet installed
+// now, the one whose words the command just matched. An alphabet swap
+// therefore needs nothing from the extension in either direction.
 
 // spokenWordToLetter maps one alphabet word to its letter ("cape" -> "c").
 // A word the alphabet does not hold passes through unchanged, so a param that

@@ -41,6 +41,8 @@ func newDriftHost(t *testing.T) (*Host, map[string]map[string]any, *seamLog) {
 	return h, pushes, log
 }
 
+// frameReq is one frame's request holding the given codewords, named by their
+// spoken words for the reader and sent in letters, as the extension sends them.
 func frameReq(frame int, codewords ...string) GrammarFrameRequest {
 	req := GrammarFrameRequest{
 		ConnID: "chrome", TabID: driftTab, FrameID: frame, WindowID: 1, Visible: true,
@@ -48,7 +50,7 @@ func frameReq(frame int, codewords ...string) GrammarFrameRequest {
 	}
 	for i, cw := range codewords {
 		req.Elements = append(req.Elements, GrammarElement{
-			ID: i + 1, Type: "link", Codeword: cw, InStrictViewport: true,
+			ID: i + 1, Type: "link", Codeword: lt(cw), InStrictViewport: true,
 		})
 	}
 	return req

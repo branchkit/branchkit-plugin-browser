@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/branchkit/plugin-sdk-go"
@@ -35,8 +36,11 @@ import (
 // live hints from the browser tab during a trial.
 
 type calibrationFixture struct {
-	mu     sync.Mutex
-	active bool
+	mu sync.Mutex
+	// Written under mu; read without it (IsActive), because an alphabet
+	// change can arrive while apply holds mu: its refreshCodewords runs the
+	// mirror's OnChange, and applyAlphabet asks IsActive.
+	active atomic.Bool
 	handle string
 }
 
@@ -44,9 +48,7 @@ type calibrationFixture struct {
 // Used by `handleGrammarFramePut` to skip extension-driven writes
 // during a trial.
 func (c *calibrationFixture) IsActive() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.active
+	return c.active.Load()
 }
 
 // applyHintsFixture hydrates the hint collections to the full alphabet ×
@@ -61,7 +63,7 @@ func (h *Host) applyHintsFixture(pluginID string) (string, error) {
 	h.calibration.mu.Lock()
 	defer h.calibration.mu.Unlock()
 
-	refresh := h.calibration.active
+	refresh := h.calibration.active.Load()
 
 	// Always re-read the alphabet so a mid-walk codeword override (retune) is
 	// picked up. refreshCodewords no-ops when the mirror isn't wired
@@ -162,7 +164,7 @@ func (h *Host) applyHintsFixture(pluginID string) (string, error) {
 	if !refresh {
 		handle = fmt.Sprintf("cal_hints_%d", time.Now().UnixNano())
 	}
-	h.calibration.active = true
+	h.calibration.active.Store(true)
 	h.calibration.handle = handle
 	verb := "applied"
 	if refresh {
@@ -177,7 +179,7 @@ func (h *Host) releaseHintsFixture(pluginID, handle string) error {
 	h.calibration.mu.Lock()
 	defer h.calibration.mu.Unlock()
 
-	if !h.calibration.active {
+	if !h.calibration.active.Load() {
 		return fmt.Errorf("no calibration fixture active")
 	}
 	if h.calibration.handle != handle {
@@ -231,9 +233,21 @@ func (h *Host) releaseHintsFixture(pluginID, handle string) error {
 		branchkit.Logf(pluginID, "release: vocabulary.commit failed: %v", err)
 	}
 
-	h.calibration.active = false
+	h.calibration.active.Store(false)
 	h.calibration.handle = ""
 	branchkit.Logf(pluginID, "calibration fixture released: handle=%s", handle)
+
+	// 5. Put the browser's own hints back. The frames' grammar outlived the
+	//    trial in their sessions (stored as letters), and a retune during it
+	//    changed words the reprojection skipped while the fixture owned the
+	//    collections (reprojectForAlphabetLocked): project them now, under
+	//    the alphabet as it stands, rather than wait for the page to change.
+	if h.state != nil && h.state.HintGate != nil {
+		h.mu.Lock()
+		h.reprojectForAlphabetLocked()
+		h.mu.Unlock()
+		h.applyDerivedHintsTag("calibration_release")
+	}
 	return firstErr
 }
 

@@ -124,9 +124,9 @@ func TestRecomputeNeedsRescanOnDirectSwitchBack(t *testing.T) {
 
 	// Both browsers hold grammar for their active tabs.
 	chrome := h.ensureFrameSession(frameKey{ConnID: "chrome", TabID: 7, FrameID: 0})
-	chrome.Codewords["arch bake"] = map[string]string{"id": "1"}
+	chrome.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 	fox := h.ensureFrameSession(frameKey{ConnID: "fox", TabID: 9, FrameID: 0})
-	fox.Codewords["zoo cane"] = map[string]string{"id": "2"}
+	fox.Codewords[lt("zoo deck")] = map[string]string{"id": "2"}
 
 	// Chrome takes focus: transition, projection restores Chrome's grammar.
 	h.state.FocusedBundleID = "com.google.Chrome"
@@ -145,7 +145,7 @@ func TestRecomputeNeedsRescanOnDirectSwitchBack(t *testing.T) {
 	if chromeSess == nil || !chromeSess.SweptStale {
 		t.Fatalf("loser's sessions must be parked (kept + SweptStale), got %+v", chromeSess)
 	}
-	if _, ok := chromeSess.Codewords["arch bake"]; !ok {
+	if _, ok := chromeSess.Codewords[lt("arch bake")]; !ok {
 		t.Error("parked session must keep its codewords")
 	}
 

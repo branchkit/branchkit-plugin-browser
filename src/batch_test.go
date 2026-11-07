@@ -17,65 +17,64 @@ import (
 // by integration tests, not here.
 
 func TestValidateGrammarElementValid(t *testing.T) {
-	e := GrammarElement{ID: 7, Type: "button", Codeword: "arch bake"}
-	prefix, suffix, payload, reason := validateGrammarElement(e, 0, testCodewords)
+	e := GrammarElement{ID: 7, Type: "button", Codeword: " a  b "}
+	token, payload, reason := validateGrammarElement(e, 0)
 	if reason != "" {
 		t.Fatalf("unexpected failure: %q", reason)
 	}
-	if prefix != "arch" || suffix != "bake" {
-		t.Errorf("prefix/suffix = %q/%q, want arch/bake", prefix, suffix)
+	if token != "a b" {
+		t.Errorf("token = %q, want the normalized \"a b\"", token)
 	}
 	if payload["letter"] != "ab" {
 		t.Errorf("payload.letter = %q, want ab", payload["letter"])
 	}
-	if payload["id"] != "7" || payload["frame_id"] != "0" {
-		t.Errorf("payload.id/frame_id = %q/%q, want 7/0", payload["id"], payload["frame_id"])
+	if payload["id"] != "7" || payload["frame_id"] != "0" || payload["type"] != "button" {
+		t.Errorf("payload.id/frame_id/type = %q/%q/%q, want 7/0/button", payload["id"], payload["frame_id"], payload["type"])
 	}
-	if payload["codeword"] != "arch bake" || payload["type"] != "button" {
-		t.Errorf("payload.codeword/type = %q/%q", payload["codeword"], payload["type"])
+	if _, has := payload["codeword"]; has {
+		t.Errorf("payload stores no words, got codeword %q", payload["codeword"])
 	}
 }
 
 func TestValidateGrammarElementEmptyCodeword(t *testing.T) {
-	e := GrammarElement{Codeword: ""}
-	_, _, _, reason := validateGrammarElement(e, 0, testCodewords)
-	if reason != "empty_codeword" {
-		t.Errorf("reason = %q, want empty_codeword", reason)
-	}
-	// Whitespace-only is also empty.
-	e.Codeword = "   "
-	_, _, _, reason = validateGrammarElement(e, 0, testCodewords)
-	if reason != "empty_codeword" {
-		t.Errorf("whitespace reason = %q, want empty_codeword", reason)
+	for _, cw := range []string{"", "   "} {
+		if _, _, reason := validateGrammarElement(GrammarElement{Codeword: cw}, 0); reason != "empty_codeword" {
+			t.Errorf("%q: reason = %q, want empty_codeword", cw, reason)
+		}
 	}
 }
 
-func TestValidateGrammarElementSingleWordCodeword(t *testing.T) {
-	e := GrammarElement{Codeword: "arch"}
-	_, _, _, reason := validateGrammarElement(e, 0, testCodewords)
-	if reason != "invalid_codeword_parts" {
-		t.Errorf("reason = %q, want invalid_codeword_parts", reason)
+func TestValidateGrammarElementNotAPair(t *testing.T) {
+	for _, cw := range []string{"a", "a b c"} {
+		if _, _, reason := validateGrammarElement(GrammarElement{Codeword: cw}, 0); reason != "invalid_codeword_parts" {
+			t.Errorf("%q: reason = %q, want invalid_codeword_parts", cw, reason)
+		}
 	}
 }
 
-func TestValidateGrammarElementThreeWordCodeword(t *testing.T) {
-	e := GrammarElement{Codeword: "arch bake check"}
-	_, _, _, reason := validateGrammarElement(e, 0, testCodewords)
-	if reason != "invalid_codeword_parts" {
-		t.Errorf("reason = %q, want invalid_codeword_parts", reason)
+// Spoken words, capitals and anything outside a-z are refused: the wire
+// carries letters only.
+func TestValidateGrammarElementNotLetters(t *testing.T) {
+	for _, cw := range []string{"arch bake", "a bake", "A b", "a 1", "é b"} {
+		if _, _, reason := validateGrammarElement(GrammarElement{Codeword: cw}, 0); reason != "not_a_letter" {
+			t.Errorf("%q: reason = %q, want not_a_letter", cw, reason)
+		}
 	}
 }
 
-func TestValidateGrammarElementUnknownWord(t *testing.T) {
-	e := GrammarElement{Codeword: "nonsense bake"}
-	_, _, _, reason := validateGrammarElement(e, 0, testCodewords)
-	if reason != "codeword_not_in_alphabet" {
-		t.Errorf("reason = %q, want codeword_not_in_alphabet", reason)
+func TestTokenWords(t *testing.T) {
+	if p, s, ok := tokenWords("a b", testCodewords); !ok || p != "arch" || s != "bake" {
+		t.Errorf("tokenWords(a b) = %q %q %v, want arch bake true", p, s, ok)
 	}
-	e.Codeword = "arch nonsense"
-	_, _, _, reason = validateGrammarElement(e, 0, testCodewords)
-	if reason != "codeword_not_in_alphabet" {
-		t.Errorf("reason = %q, want codeword_not_in_alphabet", reason)
+	var half [26]string
+	half[0] = "arch"
+	if _, _, ok := tokenWords("a b", half); ok {
+		t.Error("a letter with no word yet must not project")
+	}
+	for _, bad := range []string{"ab", "a  b", "A b", "a"} {
+		if _, _, ok := tokenWords(bad, testCodewords); ok {
+			t.Errorf("tokenWords(%q) projected", bad)
+		}
 	}
 }
 
@@ -104,7 +103,7 @@ func TestEnsureFrameSessionReusesExisting(t *testing.T) {
 	h.state = &PluginState{FrameSessions: make(map[frameKey]*FrameSession)}
 	key := frameKey{ConnID: "conn-1", TabID: 1, FrameID: 0}
 	first := h.ensureFrameSession(key)
-	first.Codewords["arch bake"] = map[string]string{"letter": "ab"}
+	first.Codewords[lt("arch bake")] = map[string]string{"letter": "ab"}
 
 	second := h.ensureFrameSession(key)
 	if second != first {
@@ -136,18 +135,18 @@ func TestCommitGrammarFrameReplacesTheFrame(t *testing.T) {
 	key := frameKey{ConnID: "conn-1", TabID: 1, FrameID: 0}
 
 	commitFrame(h, key,
-		GrammarElement{ID: 7, Type: "button", Codeword: "arch bake", InStrictViewport: true},
-		GrammarElement{ID: 8, Type: "link", Codeword: "zoo check"})
-	commit := commitFrame(h, key, GrammarElement{ID: 7, Type: "button", Codeword: "arch bake"})
+		GrammarElement{ID: 7, Type: "button", Codeword: lt("arch bake"), InStrictViewport: true},
+		GrammarElement{ID: 8, Type: "link", Codeword: lt("zoo check")})
+	commit := commitFrame(h, key, GrammarElement{ID: 7, Type: "button", Codeword: lt("arch bake")})
 
 	sess := h.state.FrameSessions[key]
-	if _, ok := sess.Codewords["arch bake"]; !ok {
+	if _, ok := sess.Codewords[lt("arch bake")]; !ok {
 		t.Error("a codeword the request carries must stay")
 	}
-	if _, ok := sess.Codewords["zoo check"]; ok {
+	if _, ok := sess.Codewords[lt("zoo check")]; ok {
 		t.Error("a codeword the request omits must be gone")
 	}
-	if sess.StrictCodewords["arch bake"] {
+	if sess.StrictCodewords[lt("arch bake")] {
 		t.Error("strict must follow the latest request, not accumulate")
 	}
 	if !commit.affectedPrefixes["zoo"] || !commit.affectedPrefixes["arch"] {
@@ -183,8 +182,8 @@ func TestCommitGrammarFrameResendWritesNothing(t *testing.T) {
 	t.Cleanup(func() { h.replaceHintRPC = prev })
 	key := frameKey{ConnID: "conn-1", TabID: 1, FrameID: 0}
 	elements := []GrammarElement{
-		{ID: 7, Type: "button", Codeword: "arch bake", InStrictViewport: true},
-		{ID: 8, Type: "link", Codeword: "zoo check"},
+		{ID: 7, Type: "button", Codeword: lt("arch bake"), InStrictViewport: true},
+		{ID: 8, Type: "link", Codeword: lt("zoo check")},
 	}
 
 	_ = h.syncAffectedPrefixes("browser", commitFrame(h, key, elements...))
@@ -208,8 +207,8 @@ func TestCommitGrammarFrameLeavesSiblingsAlone(t *testing.T) {
 	top := frameKey{ConnID: "conn-1", TabID: 1, FrameID: 0}
 	iframe := frameKey{ConnID: "conn-1", TabID: 1, FrameID: 3}
 
-	commitFrame(h, iframe, GrammarElement{ID: 1, Type: "link", Codeword: "arch check"})
-	commit := commitFrame(h, top, GrammarElement{ID: 2, Type: "link", Codeword: "arch bake"})
+	commitFrame(h, iframe, GrammarElement{ID: 1, Type: "link", Codeword: lt("arch check")})
+	commit := commitFrame(h, top, GrammarElement{ID: 2, Type: "link", Codeword: lt("arch bake")})
 	_ = h.syncAffectedPrefixes("browser", commit)
 	arch := pushes["plugin.browser.hints_arch"]
 	if arch["bake"] == nil || arch["check"] == nil {
@@ -230,10 +229,10 @@ func TestCommitGrammarFrameReportsInvalidElements(t *testing.T) {
 	h.state = &PluginState{PluginID: "browser", FrameSessions: make(map[frameKey]*FrameSession)}
 	key := frameKey{ConnID: "conn-1", TabID: 1, FrameID: 0}
 	commit := commitFrame(h, key,
-		GrammarElement{ID: 1, Type: "link", Codeword: "arch bake"},
+		GrammarElement{ID: 1, Type: "link", Codeword: lt("arch bake")},
 		GrammarElement{ID: 2, Type: "link", Codeword: "nonsense bake"})
-	if len(commit.failed) != 1 || commit.failed[0].Reason != "codeword_not_in_alphabet" {
-		t.Errorf("failed = %v, want one codeword_not_in_alphabet", commit.failed)
+	if len(commit.failed) != 1 || commit.failed[0].Reason != "not_a_letter" || commit.failed[0].Codeword != "nonsense bake" {
+		t.Errorf("failed = %v, want one not_a_letter, its codeword as sent", commit.failed)
 	}
 	if got := len(h.state.FrameSessions[key].Codewords); got != 1 {
 		t.Errorf("session holds %d codewords, want 1", got)
@@ -299,9 +298,9 @@ func TestSameTabIDAcrossConnsCoexists(t *testing.T) {
 	withTestPushFn(h, t, stub)
 
 	a := h.ensureFrameSession(frameKey{ConnID: "conn-1", TabID: 1, FrameID: 0})
-	a.Codewords["arch bake"] = map[string]string{"id": "1"}
+	a.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 	b := h.ensureFrameSession(frameKey{ConnID: "conn-2", TabID: 1, FrameID: 0})
-	b.Codewords["zoo cat"] = map[string]string{"id": "2"}
+	b.Codewords[lt("zoo take")] = map[string]string{"id": "2"}
 
 	if len(pushes) != 0 {
 		t.Errorf("coexisting sessions must not trigger any cleanup sync, got %v", pushes)
@@ -331,8 +330,8 @@ func TestConnCleanupPushFailureLogsButContinues(t *testing.T) {
 
 	key := frameKey{ConnID: "conn-1", TabID: 1, FrameID: 0}
 	first := h.ensureFrameSession(key)
-	first.Codewords["arch bake"] = map[string]string{}
-	first.Codewords["zoo cat"] = map[string]string{}
+	first.Codewords[lt("arch bake")] = map[string]string{}
+	first.Codewords[lt("zoo take")] = map[string]string{}
 
 	// Conn cleanup (SSE disconnect path) pushes one per affected prefix
 	// (arch, zoo) plus the prefix list. All fail but must not panic.
@@ -350,11 +349,11 @@ func TestCleanupTabSessionsLockedRebuildsEveryAffectedPrefix(t *testing.T) {
 
 	// Two frames in tab 1, one frame in tab 2.
 	s1f0 := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 0})
-	s1f0.Codewords["arch bake"] = map[string]string{}
+	s1f0.Codewords[lt("arch bake")] = map[string]string{}
 	s1f1 := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 1})
-	s1f1.Codewords["zoo cat"] = map[string]string{}
+	s1f1.Codewords[lt("zoo take")] = map[string]string{}
 	s2 := h.ensureFrameSession(frameKey{TabID: 2, FrameID: 0})
-	s2.Codewords["jake dog"] = map[string]string{}
+	s2.Codewords[lt("jake food")] = map[string]string{}
 
 	n := h.cleanupTabSessionsLocked("browser", "", 1, "test")
 	if n != 2 {
@@ -430,17 +429,17 @@ func TestCrossFrameSessionsAreIsolated(t *testing.T) {
 	f1 := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 1})
 	f2 := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 2})
 
-	f0.Codewords["arch bake"] = map[string]string{"id": "10"}
-	f1.Codewords["zoo cat"] = map[string]string{"id": "20"}
-	f2.Codewords["jake dog"] = map[string]string{"id": "30"}
+	f0.Codewords[lt("arch bake")] = map[string]string{"id": "10"}
+	f1.Codewords[lt("zoo take")] = map[string]string{"id": "20"}
+	f2.Codewords[lt("jake food")] = map[string]string{"id": "30"}
 
-	if _, ok := f0.Codewords["zoo cat"]; ok {
+	if _, ok := f0.Codewords[lt("zoo take")]; ok {
 		t.Error("frame 0 must not see frame 1's codeword")
 	}
-	if _, ok := f1.Codewords["arch bake"]; ok {
+	if _, ok := f1.Codewords[lt("arch bake")]; ok {
 		t.Error("frame 1 must not see frame 0's codeword")
 	}
-	if _, ok := f2.Codewords["arch bake"]; ok {
+	if _, ok := f2.Codewords[lt("arch bake")]; ok {
 		t.Error("frame 2 must not see frame 0's codeword")
 	}
 }
@@ -456,9 +455,9 @@ func TestCleanupRebuildsPrefixWithRemainingSiblingState(t *testing.T) {
 	withTestPushFn(h, t, stub)
 
 	f0 := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 0})
-	f0.Codewords["arch bake"] = map[string]string{"id": "10"}
+	f0.Codewords[lt("arch bake")] = map[string]string{"id": "10"}
 	f1 := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 1})
-	f1.Codewords["arch check"] = map[string]string{"id": "20"}
+	f1.Codewords[lt("arch check")] = map[string]string{"id": "20"}
 
 	h.cleanupFrameSessionLocked("browser", frameKey{TabID: 1, FrameID: 1}, f1, "test")
 
@@ -484,9 +483,9 @@ func TestImplicitResetRebuildsPrefixFromRemainingFrames(t *testing.T) {
 
 	// Top frame + iframe both under session-A.
 	top := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 0})
-	top.Codewords["arch bake"] = map[string]string{}
+	top.Codewords[lt("arch bake")] = map[string]string{}
 	iframe := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 1})
-	iframe.Codewords["zoo cat"] = map[string]string{}
+	iframe.Codewords[lt("zoo take")] = map[string]string{}
 
 	// The top frame's next request holds nothing. It must NOT wipe the
 	// iframe's codeword from entity_cache.
@@ -511,7 +510,7 @@ func TestImplicitResetRebuildsPrefixFromRemainingFrames(t *testing.T) {
 	if iframeAfter == nil {
 		t.Errorf("iframe session must survive top-frame rescan, got %+v", iframeAfter)
 	}
-	if _, ok := iframeAfter.Codewords["zoo cat"]; !ok {
+	if _, ok := iframeAfter.Codewords[lt("zoo take")]; !ok {
 		t.Error("iframe's codeword must persist after top-frame rescan")
 	}
 }
@@ -526,9 +525,9 @@ func TestCrossFrameCodewordsCoexistInPerPrefixCollection(t *testing.T) {
 	withTestPushFn(h, t, stub)
 
 	f0 := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 0})
-	f0.Codewords["arch bake"] = map[string]string{"id": "10"}
+	f0.Codewords[lt("arch bake")] = map[string]string{"id": "10"}
 	f1 := h.ensureFrameSession(frameKey{TabID: 1, FrameID: 1})
-	f1.Codewords["arch check"] = map[string]string{"id": "20"}
+	f1.Codewords[lt("arch check")] = map[string]string{"id": "20"}
 
 	// f0's next request no longer holds "arch bake".
 	commit := commitFrame(h, frameKey{TabID: 1, FrameID: 0})
@@ -632,20 +631,20 @@ func TestBuildTabPrefixStateScopesByConn(t *testing.T) {
 	h.state = &PluginState{FrameSessions: make(map[frameKey]*FrameSession)}
 
 	chrome := h.ensureFrameSession(frameKey{ConnID: "conn-chrome", TabID: 1, FrameID: 0})
-	chrome.Codewords["arch bake"] = map[string]string{"id": "1"}
+	chrome.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 	firefox := h.ensureFrameSession(frameKey{ConnID: "conn-firefox", TabID: 99, FrameID: 0})
-	firefox.Codewords["arch cane"] = map[string]string{"id": "2"}
+	firefox.Codewords[lt("arch deck")] = map[string]string{"id": "2"}
 
 	chromeState, _ := h.buildTabPrefixState("conn-chrome", 1)
 	if _, ok := chromeState["arch"]["bake"]; !ok {
 		t.Error("Chrome's own codeword should be present")
 	}
-	if _, ok := chromeState["arch"]["cane"]; ok {
+	if _, ok := chromeState["arch"]["deck"]; ok {
 		t.Error("Firefox's codeword leaked into Chrome's prefix state")
 	}
 
 	firefoxState, _ := h.buildTabPrefixState("conn-firefox", 99)
-	if _, ok := firefoxState["arch"]["cane"]; !ok {
+	if _, ok := firefoxState["arch"]["deck"]; !ok {
 		t.Error("Firefox's own codeword should be present")
 	}
 	if _, ok := firefoxState["arch"]["bake"]; ok {
@@ -662,9 +661,9 @@ func TestCleanupConnSessionsLockedWipesOneBrowser(t *testing.T) {
 	withTestPushFn(h, t, stub)
 
 	chrome := h.ensureFrameSession(frameKey{ConnID: "conn-chrome", TabID: 1, FrameID: 0})
-	chrome.Codewords["arch bake"] = map[string]string{"id": "1"}
+	chrome.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 	firefox := h.ensureFrameSession(frameKey{ConnID: "conn-firefox", TabID: 99, FrameID: 0})
-	firefox.Codewords["zoo cane"] = map[string]string{"id": "2"}
+	firefox.Codewords[lt("zoo deck")] = map[string]string{"id": "2"}
 
 	cleared := h.cleanupConnSessionsLocked("browser", "conn-chrome", "browser_switch")
 	if cleared != 1 {
@@ -719,9 +718,9 @@ func TestBackgroundBatchStoresButDoesNotProject(t *testing.T) {
 	withTestPushFn(h, t, stub)
 
 	chrome := h.ensureFrameSession(frameKey{ConnID: "conn-chrome", TabID: 1, FrameID: 0})
-	chrome.Codewords["arch bake"] = map[string]string{"id": "1"}
+	chrome.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 	fox := h.ensureFrameSession(frameKey{ConnID: "conn-fox", TabID: 99, FrameID: 0})
-	fox.Codewords["arch cane"] = map[string]string{"id": "2"}
+	fox.Codewords[lt("arch deck")] = map[string]string{"id": "2"}
 
 	// Firefox is focused; project.
 	h.state.FocusedConnID = "conn-fox"
@@ -732,7 +731,7 @@ func TestBackgroundBatchStoresButDoesNotProject(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected push to plugin.browser.hints_arch, got %v", pushes)
 	}
-	if _, hasCane := arch["cane"]; !hasCane {
+	if _, hasCane := arch["deck"]; !hasCane {
 		t.Errorf("focused Firefox's 'cane' must be projected, got %v", arch)
 	}
 	if _, hasBake := arch["bake"]; hasBake {
@@ -754,9 +753,9 @@ func TestFocusChangeReprojects(t *testing.T) {
 	withTestPushFn(h, t, stub)
 
 	chrome := h.ensureFrameSession(frameKey{ConnID: "conn-chrome", TabID: 1, FrameID: 0})
-	chrome.Codewords["arch bake"] = map[string]string{"id": "1"}
+	chrome.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 	fox := h.ensureFrameSession(frameKey{ConnID: "conn-fox", TabID: 99, FrameID: 0})
-	fox.Codewords["zoo cane"] = map[string]string{"id": "2"}
+	fox.Codewords[lt("zoo deck")] = map[string]string{"id": "2"}
 
 	// Chrome focused first.
 	h.state.FocusedConnID = "conn-chrome"
@@ -771,7 +770,7 @@ func TestFocusChangeReprojects(t *testing.T) {
 	h.state.FocusedTabID = 99
 	h.reprojectFocusedSourceLocked("browser")
 
-	if zoo := pushes["plugin.browser.hints_zoo"]; len(zoo) != 1 || zoo["cane"] == nil {
+	if zoo := pushes["plugin.browser.hints_zoo"]; len(zoo) != 1 || zoo["deck"] == nil {
 		t.Errorf("after switch, Firefox should project zoo={cane}, got %v", zoo)
 	}
 	// Chrome's stale prefix is wiped, not stranded.
@@ -796,9 +795,9 @@ func TestReprojectSkipsEmptySourceNoDrain(t *testing.T) {
 	}
 	pushes, stub := recordPushes()
 	withTestPushFn(h, t, stub)
-	// "air" is already live when the reproject runs — the state the guard
+	// "own" is already live when the reproject runs — the state the guard
 	// below must not drain.
-	seedLivePrefix("browser", "air")
+	seedLivePrefix("browser", "own")
 
 	// Focused source has no FrameSessions for its tab → buildTabPrefixState empty.
 	h.state.FocusedConnID = "conn-chrome"
@@ -809,7 +808,7 @@ func TestReprojectSkipsEmptySourceNoDrain(t *testing.T) {
 	if len(pushes) != 0 {
 		t.Errorf("empty-source reproject must touch no collections, got pushes=%v", pushes)
 	}
-	if live, _ := h.livePrefixes("browser"); !live["air"] {
+	if live, _ := h.livePrefixes("browser"); !live["own"] {
 		t.Error("empty-source reproject drained the live per-prefix grammar")
 	}
 }
@@ -830,18 +829,18 @@ func TestSyncPerPrefixEmptyNewDataIsAnExplicitWipe(t *testing.T) {
 	h.state = &PluginState{PluginID: "browser"}
 	recorded, stub := recordPushes()
 	withTestPushFn(h, t, stub)
-	seedLivePrefix("browser", "each")
-	if err := h.syncPerPrefix("browser", "each", map[string]any{}); err != nil {
+	seedLivePrefix("browser", "egg")
+	if err := h.syncPerPrefix("browser", "egg", map[string]any{}); err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	got, ok := recorded["plugin.browser.hints_each"]
+	got, ok := recorded["plugin.browser.hints_egg"]
 	if !ok {
-		t.Fatalf("expected the wipe to reach plugin.browser.hints_each, got %v", recorded)
+		t.Fatalf("expected the wipe to reach plugin.browser.hints_egg, got %v", recorded)
 	}
 	if len(got) != 0 {
 		t.Errorf("expected empty desired-state, got %v", got)
 	}
-	if live, _ := h.livePrefixes("browser"); live["each"] {
+	if live, _ := h.livePrefixes("browser"); live["egg"] {
 		t.Error("a wiped prefix must no longer hold records")
 	}
 }
@@ -878,10 +877,10 @@ func TestSessionCycleNoSilentEviction(t *testing.T) {
 
 	// Step 1: Session A populates four codewords across three prefixes.
 	a := h.ensureFrameSession(key)
-	a.Codewords["drum made"] = map[string]string{"id": "1", "letter": "dm"}
-	a.Codewords["each pit"] = map[string]string{"id": "2", "letter": "ep"}
-	a.Codewords["each air"] = map[string]string{"id": "3", "letter": "ea"}
-	a.Codewords["gust cap"] = map[string]string{"id": "4", "letter": "gc"}
+	a.Codewords[lt("work make")] = map[string]string{"id": "1", "letter": "dm"}
+	a.Codewords[lt("egg quick")] = map[string]string{"id": "2", "letter": "ep"}
+	a.Codewords[lt("egg own")] = map[string]string{"id": "3", "letter": "ea"}
+	a.Codewords[lt("glad plan")] = map[string]string{"id": "4", "letter": "gc"}
 
 	// Cleanup that fires when a NEW scan begins with a different
 	// session_id mid-stream. Under the old REPLACE protocol this silently
@@ -890,7 +889,7 @@ func TestSessionCycleNoSilentEviction(t *testing.T) {
 	h.cleanupFrameSessionLocked("browser", key, a, "session_id_changed")
 	delete(h.state.FrameSessions, key)
 
-	for _, prefix := range []string{"drum", "each", "gust"} {
+	for _, prefix := range []string{"work", "egg", "glad"} {
 		got, ok := recorded["plugin.browser.hints_"+prefix]
 		if !ok {
 			t.Errorf("after session-A cleanup, prefix %q must receive an explicit wipe", prefix)
@@ -909,12 +908,12 @@ func TestSessionCycleNoSilentEviction(t *testing.T) {
 	// previously-cleared codewords must NOT silently reappear, and
 	// session B's additions must be present.
 	b := h.ensureFrameSession(key)
-	b.Codewords["drum made"] = map[string]string{"id": "10", "letter": "dm"}
-	b.Codewords["kind ink"] = map[string]string{"id": "11", "letter": "ki"}
+	b.Codewords[lt("work make")] = map[string]string{"id": "10", "letter": "dm"}
+	b.Codewords[lt("kind iron")] = map[string]string{"id": "11", "letter": "ki"}
 
 	conn, tab := h.projectionSourceLocked("conn-1", 1)
 	allByPrefix, _ := h.buildTabPrefixState(conn, tab)
-	for prefix := range map[string]bool{"drum": true, "kind": true} {
+	for prefix := range map[string]bool{"work": true, "kind": true} {
 		data := allByPrefix[prefix]
 		if data == nil {
 			data = make(map[string]any)
@@ -933,18 +932,18 @@ func TestSessionCycleNoSilentEviction(t *testing.T) {
 	//   - kind has exactly {ink} (new from session B).
 	//   - each + gust stay wiped (cleared with session A, not re-added).
 	//   - only {drum, kind} still hold records.
-	for prefix, wantSuffix := range map[string]string{"drum": "made", "kind": "ink"} {
+	for prefix, wantSuffix := range map[string]string{"work": "make", "kind": "iron"} {
 		got := recorded["plugin.browser.hints_"+prefix]
 		if len(got) != 1 || got[wantSuffix] == nil {
 			t.Errorf("prefix %q desired-state = %v, want exactly {%s}", prefix, got, wantSuffix)
 		}
 	}
-	for _, prefix := range []string{"each", "gust"} {
+	for _, prefix := range []string{"egg", "glad"} {
 		if got := recorded["plugin.browser.hints_"+prefix]; len(got) > 0 {
 			t.Errorf("prefix %q should stay wiped (cleared with session A), got %v", prefix, got)
 		}
 	}
-	wantPrefixes := map[string]bool{"drum": true, "kind": true}
+	wantPrefixes := map[string]bool{"work": true, "kind": true}
 	if live, _ := h.livePrefixes("browser"); !mapsEqual(live, wantPrefixes) {
 		t.Errorf("prefixes still holding records = %v, want %v", live, wantPrefixes)
 	}
@@ -974,7 +973,7 @@ func TestTabSwitchDeprojectsButKeepsSessions(t *testing.T) {
 	withTestPushFn(h, t, stub)
 
 	tabA := h.ensureFrameSession(frameKey{ConnID: "conn-chrome", TabID: 1, FrameID: 0})
-	tabA.Codewords["arch bake"] = map[string]string{"id": "1"}
+	tabA.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 	h.state.FocusedConnID = "conn-chrome"
 	h.state.FocusedTabID = 1
 	h.reprojectFocusedSourceLocked("browser")
@@ -1026,7 +1025,7 @@ func TestTabSwitchDeprojectDefersWhileStillProjected(t *testing.T) {
 	withTestPushFn(h, t, stub)
 
 	tabA := h.ensureFrameSession(frameKey{ConnID: "conn-chrome", TabID: 1, FrameID: 0})
-	tabA.Codewords["arch bake"] = map[string]string{"id": "1"}
+	tabA.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 	h.state.FocusedConnID = "conn-chrome"
 	h.state.FocusedTabID = 1
 	h.reprojectFocusedSourceLocked("browser")
@@ -1073,7 +1072,7 @@ func TestFrameSessionEndDocMismatchIgnored(t *testing.T) {
 	key := frameKey{ConnID: "conn-1", TabID: 36, FrameID: 0}
 	sess := h.ensureFrameSession(key)
 	sess.DocID = "doc-successor"
-	sess.Codewords["arch bake"] = map[string]string{"id": "1"}
+	sess.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 
 	// Predecessor's late disconnect: same key, different document.
 	postFrameSessionEnd(h, t, "conn-1", 36, 0, "doc-predecessor")
@@ -1099,7 +1098,7 @@ func TestFrameSessionEndEmptyDocStillTearsDown(t *testing.T) {
 
 	key := frameKey{ConnID: "conn-1", TabID: 5, FrameID: 2}
 	sess := h.ensureFrameSession(key)
-	sess.Codewords["arch bake"] = map[string]string{"id": "1"}
+	sess.Codewords[lt("arch bake")] = map[string]string{"id": "1"}
 
 	postFrameSessionEnd(h, t, "conn-1", 5, 2, "doc-any")
 	if h.state.FrameSessions[key] != nil {

@@ -212,7 +212,7 @@ func TestProfileSwitchParksLosingProfile(t *testing.T) {
 	connectBrowser(h, "profile-2", chromeBundle)
 	h.state.conn("profile-1").ActiveTab = 3
 	sess := h.ensureFrameSession(frameKey{ConnID: "profile-1", TabID: 3})
-	sess.Codewords["arch bake"] = map[string]string{"id": "1", "letter": "ab"}
+	sess.Codewords[lt("arch bake")] = map[string]string{"id": "1", "letter": "ab"}
 
 	focusApp(h, chromeBundle)
 	claimFocus(t, h, "profile-1")

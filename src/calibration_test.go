@@ -159,7 +159,8 @@ func TestApplyHintsFixturePushShape(t *testing.T) {
 // the re-apply.
 func TestApplyHintsFixtureRefreshesWhenActive(t *testing.T) {
 	h := newTestHost()
-	h.calibration = &calibrationFixture{active: true, handle: "cal_prior"}
+	h.calibration = &calibrationFixture{handle: "cal_prior"}
+	h.calibration.active.Store(true)
 	h.codewordsMu.Lock()
 	h.codewords = testCodewords
 	h.codewordsMu.Unlock()
@@ -174,7 +175,7 @@ func TestApplyHintsFixtureRefreshesWhenActive(t *testing.T) {
 	if handle != "cal_prior" {
 		t.Errorf("refresh should keep the existing handle, got %q", handle)
 	}
-	if !h.calibration.active {
+	if !h.calibration.active.Load() {
 		t.Error("fixture should remain active after refresh")
 	}
 	if len(rec.snapshot()) == 0 {
@@ -215,7 +216,8 @@ func TestApplyHintsFixtureRejectsWithoutAlphabet(t *testing.T) {
 // records has nothing to forget.
 func TestReleaseWipesPrefixesAPreviousProcessHydrated(t *testing.T) {
 	h := newTestHost()
-	h.calibration = &calibrationFixture{active: true, handle: "cal_prior"}
+	h.calibration = &calibrationFixture{handle: "cal_prior"}
+	h.calibration.active.Store(true)
 	h.codewordsMu.Lock()
 	h.codewords = testCodewords
 	h.codewordsMu.Unlock()
@@ -248,7 +250,8 @@ func TestReleaseWipesPrefixesAPreviousProcessHydrated(t *testing.T) {
 // on what storage holds, not on what this process remembers pushing.
 func TestRefreshEvictsAStalePrefixThisProcessNeverPushed(t *testing.T) {
 	h := newTestHost()
-	h.calibration = &calibrationFixture{active: true, handle: "cal_prior"}
+	h.calibration = &calibrationFixture{handle: "cal_prior"}
+	h.calibration.active.Store(true)
 	h.codewordsMu.Lock()
 	h.codewords = testCodewords
 	h.codewordsMu.Unlock()
@@ -284,7 +287,8 @@ func TestReleaseHintsFixtureRejectsWhenNotActive(t *testing.T) {
 
 func TestReleaseHintsFixtureRejectsHandleMismatch(t *testing.T) {
 	h := newTestHost()
-	h.calibration = &calibrationFixture{active: true, handle: "cal_real"}
+	h.calibration = &calibrationFixture{handle: "cal_real"}
+	h.calibration.active.Store(true)
 	err := h.releaseHintsFixture("browser", "cal_fake")
 	if err == nil {
 		t.Fatal("expected error on handle mismatch")

@@ -11,7 +11,7 @@ func newPickTestState(h *Host) {
 		FrameSessions: make(map[frameKey]*FrameSession),
 	}
 	sess := h.ensureFrameSession(frameKey{ConnID: "conn-a", TabID: 7, FrameID: 0})
-	for _, cw := range []string{"arch bake", "arch cane", "arch dune"} {
+	for _, cw := range []string{lt("arch bake"), lt("arch deck"), lt("arch none")} {
 		sess.Codewords[cw] = map[string]string{"id": "1"}
 		sess.StrictCodewords[cw] = true
 	}
@@ -25,13 +25,13 @@ func TestRangePickNarrowsProjectionToChips(t *testing.T) {
 	newPickTestState(h)
 	h.state.RangePickConnID = "conn-a"
 	h.state.RangePickTabID = 7
-	h.state.RangePickCodewords = map[string]bool{"arch bake": true}
+	h.state.RangePickCodewords = map[string]bool{lt("arch bake"): true}
 
 	full, strict := h.buildTabPrefixState("conn-a", 7)
 	if _, ok := full["arch"]["bake"]; !ok {
 		t.Error("the chip codeword must survive the narrow")
 	}
-	if _, ok := full["arch"]["cane"]; ok {
+	if _, ok := full["arch"]["deck"]; ok {
 		t.Error("a non-chip codeword leaked into the projection during a pick")
 	}
 	if len(full["arch"]) != 1 {
@@ -54,7 +54,7 @@ func TestRangePickNarrowsDespiteStaleArmIdentity(t *testing.T) {
 	// Armed under a connection id that matches no session in the plugin.
 	h.state.RangePickConnID = "conn-from-a-restarted-service-worker"
 	h.state.RangePickTabID = 999
-	h.state.RangePickCodewords = map[string]bool{"arch bake": true}
+	h.state.RangePickCodewords = map[string]bool{lt("arch bake"): true}
 
 	full, _ := h.buildTabPrefixState("conn-a", 7)
 	if len(full["arch"]) != 1 {
@@ -72,15 +72,15 @@ func TestRangePickNarrowIsScopedToItsSource(t *testing.T) {
 	h := newTestHost()
 	newPickTestState(h)
 	other := h.ensureFrameSession(frameKey{ConnID: "conn-a", TabID: 8, FrameID: 0})
-	other.Codewords["arch echo"] = map[string]string{"id": "2"}
-	other.StrictCodewords["arch echo"] = true
+	other.Codewords[lt("arch voice")] = map[string]string{"id": "2"}
+	other.StrictCodewords[lt("arch voice")] = true
 
 	h.state.RangePickConnID = "conn-a"
 	h.state.RangePickTabID = 7
-	h.state.RangePickCodewords = map[string]bool{"arch bake": true}
+	h.state.RangePickCodewords = map[string]bool{lt("arch bake"): true}
 
 	full, _ := h.buildTabPrefixState("conn-a", 8)
-	if _, ok := full["arch"]["echo"]; !ok {
+	if _, ok := full["arch"]["voice"]; !ok {
 		t.Error("a pick in tab 7 must not narrow tab 8's projection")
 	}
 }
@@ -106,7 +106,7 @@ func TestRangePickDrainRestoresFullProjection(t *testing.T) {
 	withTestPushFn(h, t, stub)
 	h.state.RangePickConnID = "conn-a"
 	h.state.RangePickTabID = 7
-	h.state.RangePickCodewords = map[string]bool{"arch bake": true}
+	h.state.RangePickCodewords = map[string]bool{lt("arch bake"): true}
 
 	h.drainRangePickLocked("browser", "test")
 
@@ -129,7 +129,7 @@ func TestRangePickDrainsOnTabSessionEnd(t *testing.T) {
 	withTestPushFn(h, t, stub)
 	h.state.RangePickConnID = "conn-a"
 	h.state.RangePickTabID = 7
-	h.state.RangePickCodewords = map[string]bool{"arch bake": true}
+	h.state.RangePickCodewords = map[string]bool{lt("arch bake"): true}
 
 	h.cleanupTabSessionsLocked("browser", "conn-a", 7, "tab_close")
 
