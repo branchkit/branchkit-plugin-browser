@@ -543,3 +543,29 @@ func TestAlphabetSwapReprojectsAnIdleIframesHints(t *testing.T) {
 		t.Errorf("after the swap the old hints_arch_strict still holds %v", got)
 	}
 }
+
+// With a live frame in the tab, a dormant iframe the sweeper already dropped
+// stays dropped across an alphabet change: only the all-stale case revives.
+func TestAlphabetSwapLeavesADroppedIframeDropped(t *testing.T) {
+	h, pushes, _ := newDriftHost(t)
+	h.applyAlphabet(alphabetOne)
+	putFrame(t, h, letterFrame(0, []string{"c d"}, "c d"))
+	putFrame(t, h, letterFrame(5, []string{"a b"}, "a b"))
+	h.mu.Lock()
+	h.state.FrameSessions[frameKey{ConnID: "chrome", TabID: driftTab, FrameID: 5}].LastBatchAt =
+		time.Now().Add(-2 * staleFrameSessionTTL)
+	h.mu.Unlock()
+	h.sweepStaleFrameSessionsOnce(time.Now())
+	if got := hintEntries(pushes, "arch", true); len(got) != 0 {
+		t.Fatalf("setup: the sweeper must drop the dormant iframe, hints_arch_strict = %v", got)
+	}
+
+	h.applyAlphabet(alphabetTwo)
+	// alphabetTwo: a=bat b=arch c=drum d=cape.
+	if got := hintEntries(pushes, "drum", true); !mapsEqual(got, setOf("cape")) {
+		t.Errorf("after the swap the live top frame: hints_drum_strict = %v, want {cape}", got)
+	}
+	if got := hintEntries(pushes, "bat", true); len(got) != 0 {
+		t.Errorf("after the swap the dropped iframe came back: hints_bat_strict = %v", got)
+	}
+}

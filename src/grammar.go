@@ -119,12 +119,15 @@ func (h *Host) applyAlphabet(updated [26]string) {
 // clears every prefix the platform still holds that the new projection does
 // not name.
 //
-// The source's sessions are revived first, as on a focus return. A frame
-// past the stale TTL (an idle iframe holding a page's only hints) still has
-// its old words projected, kept by the empty-source guard, and its badges
-// show the new words: dropping it here would leave those words unmatchable
-// until the page changed. A frame that is really gone ages out again within
-// one sweep, and the guard then keeps this projection.
+// When every hint-holding frame of the source is past the stale TTL (an idle
+// iframe holding a page's only hints), the empty-source guard has kept their
+// old words projected, and their badges show the new words; the rebuild would
+// be empty and skipped, leaving those words unmatchable until the page
+// changed. Only then are the source's sessions revived first, as on a focus
+// return: a frame that is really gone ages out again after the TTL and the
+// next sweep, and the guard then keeps the new-word projection. A source
+// with a live frame is rebuilt as it stands, so a dormant iframe the sweeper
+// already dropped stays dropped.
 //
 // Not during a calibration trial: the fixture owns the collections then and
 // rehydrates itself on a retune (applyHintsFixture); releasing it reprojects.
@@ -145,8 +148,22 @@ func (h *Host) reprojectForAlphabetLocked() {
 	if conn == "" || tab == 0 {
 		return
 	}
-	h.reviveTabSessionsLocked(conn, tab)
+	if !h.sourceHasFreshGrammarLocked(conn, tab, time.Now()) {
+		h.reviveTabSessionsLocked(conn, tab)
+	}
 	h.reprojectSourceLocked(h.state.PluginID, conn, tab)
+}
+
+// sourceHasFreshGrammarLocked reports whether some frame of (conn, tab) holds
+// codewords and is inside the stale TTL: whether buildTabPrefixState has
+// anything to build from. Caller holds mu.
+func (h *Host) sourceHasFreshGrammarLocked(conn string, tab int, now time.Time) bool {
+	for key, sess := range h.state.FrameSessions {
+		if key.ConnID == conn && key.TabID == tab && len(sess.Codewords) > 0 && !frameSessionStale(key, sess, now) {
+			return true
+		}
+	}
+	return false
 }
 
 // pushSealedAlpha maintains `browser_alpha` — the browser-owned sealed
