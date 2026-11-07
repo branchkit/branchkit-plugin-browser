@@ -151,11 +151,15 @@ func (h *Host) focusedClientLocked() (string, string) {
 // channel is full: the event (possibly a user's activate dispatch) is LOST.
 // Logged — rare by construction, and a silent drop here cost a debugging
 // session when a spoken command did nothing. Must be called with `mu` held.
+//
+// Every event leaves here, so this is where its hint params become letters
+// (inLetters): the extension never sees a spoken codeword.
 func (h *Host) sendToClientLocked(clientID string, event ActionEvent) bool {
 	ch, ok := h.state.SSEClients[clientID]
 	if !ok {
 		return false
 	}
+	event = h.inLetters(event)
 	select {
 	case ch <- event:
 		return true

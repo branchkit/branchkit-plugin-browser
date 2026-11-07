@@ -156,4 +156,5 @@ type TSAlias struct {
 // TSAliases are emitted before the interfaces.
 var TSAliases = []TSAlias{
 	{"HintVisibility", "'always' | 'manual'", "When hint badges show: always, or on demand."},
+	{"LetterToken", "string", "A hint codeword in letters, space-separated: 'c g' for a pair, 'c' for one letter. The plugin translates spoken words to letters with its own alphabet before an action leaves it."},
 }

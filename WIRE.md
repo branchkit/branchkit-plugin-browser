@@ -6,7 +6,7 @@ What an extension and the browser plugin say to each other once paired: every
 route on the plugin's listener, the events on its stream, and the shape of
 each body. How an extension pairs in the first place is in the README.
 
-`WIRE_VERSION`: `d9142fc645c80eba`. The ticket request carries it, and a mismatch is
+`WIRE_VERSION`: `4558aa8c2ddc3c57`. The ticket request carries it, and a mismatch is
 refused (409): the plugin decodes strictly, so any change to a route, field
 or type is a breaking one, and changes the version. A doc edit does not.
 
@@ -99,6 +99,9 @@ BranchKit extension builds against):
 /** When hint badges show: always, or on demand. */
 export type HintVisibility = 'always' | 'manual';
 
+/** A hint codeword in letters, space-separated: 'c g' for a pair, 'c' for one letter. The plugin translates spoken words to letters with its own alphabet before an action leaves it. */
+export type LetterToken = string;
+
 /**
  * Ack is the reply of every write route that returns no data: ok, or not ok
  * with the reason. A refused request answers it with a 4xx/5xx status.
@@ -112,7 +115,11 @@ export interface Ack {
  * ActionEvent is one action for the extension. Params is a JSON object: the
  * typed params of a synthetic action (SyntheticActions), or, for a
  * contributed command, the params the platform matched — strings, except
- * `targets`, the ordered list of a multi-target verb.
+ * `targets`, the ordered list of a multi-target verb. Hint params arrive in
+ * letters (LetterToken), never spoken words: `codeword` is a letter token,
+ * `prefix`, `word` and `word2` one letter each, and a sealed pair match
+ * (`prefix_letter` + `suffix_letter`) carries its token as `codeword` too.
+ * The same holds inside each of `targets`.
  */
 export interface ActionEvent {
   action: string;
@@ -405,9 +412,12 @@ export interface MoveActiveTabToWindowParams {
   activate: boolean;
 }
 
-/** NoopParams un-narrows the display, or narrows it to a spoken prefix. */
+/**
+ * NoopParams un-narrows the display, or narrows it to a prefix: the letter
+ * of the codeword spoken so far.
+ */
 export interface NoopParams {
-  prefix?: string;
+  prefix?: LetterToken;
 }
 
 /** OverrideResetRequest reverts one override to the default phrase. */
@@ -826,5 +836,5 @@ export const SYNTHETIC_ACTIONS = [
   'resize_window',
 ] as const;
 
-export const WIRE_VERSION = 'd9142fc645c80eba';
+export const WIRE_VERSION = '4558aa8c2ddc3c57';
 ```

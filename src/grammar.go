@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -181,4 +182,104 @@ func codewordToLetter(codeword string, words [26]string) string {
 		letter.WriteByte(byte('a' + idx))
 	}
 	return letter.String()
+}
+
+// --- Letters on the wire (actions) ---
+//
+// The extension keys hints on letter tokens ("c g" for a pair, "c" for one
+// letter); spoken words are this plugin's business. So every action leaves on
+// the stream in letters: inLetters rewrites the hint params of an outgoing
+// event with the alphabet installed now, the one whose words the command just
+// matched. An alphabet swap therefore needs nothing from the extension for
+// actions: the next action is translated under the new words.
+
+// spokenWordToLetter maps one alphabet word to its letter ("cape" -> "c").
+// A word the alphabet does not hold passes through unchanged, so a param that
+// is already a letter (or a word some other surface owns, such as a palette
+// prefix) is left as it was.
+func spokenWordToLetter(word string, words [26]string) string {
+	if word == "" {
+		return word
+	}
+	for i, w := range words {
+		if w == word {
+			return string(rune('a' + i))
+		}
+	}
+	return word
+}
+
+// spokenCodewordToToken maps a spoken codeword to its letter token, word by
+// word ("cape glad" -> "c g"), each word as spokenWordToLetter does.
+func spokenCodewordToToken(codeword string, words [26]string) string {
+	parts := strings.Fields(codeword)
+	for i, p := range parts {
+		parts[i] = spokenWordToLetter(p, words)
+	}
+	return strings.Join(parts, " ")
+}
+
+// paramsToLetters rewrites one action's hint params in place and reports
+// whether anything changed:
+//   - codeword: a spoken codeword, to its letter token;
+//   - prefix, word, word2: one spoken word each, to its letter;
+//   - prefix_letter + suffix_letter (the sealed pair match, already letters):
+//     codeword becomes their token, the identity the extension routes on;
+//   - targets (a multi-target verb): each target's params, the same way.
+func paramsToLetters(params map[string]any, words [26]string) bool {
+	changed := false
+	set := func(key, next string) {
+		if cur, _ := params[key].(string); cur != next {
+			params[key] = next
+			changed = true
+		}
+	}
+	if s, ok := params["codeword"].(string); ok {
+		set("codeword", spokenCodewordToToken(s, words))
+	}
+	for _, key := range []string{"prefix", "word", "word2"} {
+		if s, ok := params[key].(string); ok {
+			set(key, spokenWordToLetter(s, words))
+		}
+	}
+	pl, okP := params["prefix_letter"].(string)
+	sl, okS := params["suffix_letter"].(string)
+	if okP && okS {
+		set("codeword", pl+" "+sl)
+	}
+	if targets, ok := params["targets"].([]any); ok {
+		for _, t := range targets {
+			if tp, ok := t.(map[string]any); ok && paramsToLetters(tp, words) {
+				changed = true
+			}
+		}
+	}
+	return changed
+}
+
+// inLetters returns event with its hint params in letters under the current
+// alphabet (paramsToLetters). An event without such params, or with params
+// that are not an object, is returned as it came.
+func (h *Host) inLetters(event ActionEvent) ActionEvent {
+	if len(event.Params) == 0 {
+		return event
+	}
+	dec := json.NewDecoder(bytes.NewReader(event.Params))
+	dec.UseNumber() // re-encode numbers exactly as they came
+	var params map[string]any
+	if err := dec.Decode(&params); err != nil || params == nil {
+		return event
+	}
+	h.codewordsMu.RLock()
+	words := h.codewords
+	h.codewordsMu.RUnlock()
+	if !paramsToLetters(params, words) {
+		return event
+	}
+	b, err := json.Marshal(params)
+	if err != nil {
+		return event
+	}
+	event.Params = b
+	return event
 }

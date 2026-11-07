@@ -19,7 +19,11 @@ type AlphabetEvent struct {
 // ActionEvent is one action for the extension. Params is a JSON object: the
 // typed params of a synthetic action (SyntheticActions), or, for a
 // contributed command, the params the platform matched — strings, except
-// `targets`, the ordered list of a multi-target verb.
+// `targets`, the ordered list of a multi-target verb. Hint params arrive in
+// letters (LetterToken), never spoken words: `codeword` is a letter token,
+// `prefix`, `word` and `word2` one letter each, and a sealed pair match
+// (`prefix_letter` + `suffix_letter`) carries its token as `codeword` too.
+// The same holds inside each of `targets`.
 type ActionEvent struct {
 	Action string          `json:"action"`
 	Params json.RawMessage `json:"params,omitempty" ts:"Record<string, unknown>"`
@@ -67,9 +71,10 @@ type ReactivateParams struct {
 	Target string `json:"target,omitempty" ts:"'active'"`
 }
 
-// NoopParams un-narrows the display, or narrows it to a spoken prefix.
+// NoopParams un-narrows the display, or narrows it to a prefix: the letter
+// of the codeword spoken so far.
 type NoopParams struct {
-	Prefix string `json:"prefix,omitempty"`
+	Prefix string `json:"prefix,omitempty" ts:"LetterToken"`
 }
 
 // SetBadgeModeParams carries the settings collection's hint_display.
