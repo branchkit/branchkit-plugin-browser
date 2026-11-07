@@ -298,11 +298,25 @@ func TestGrammarLettersReprojectAcrossAlphabetSwap(t *testing.T) {
 // A frame that arrives before the alphabet has loaded is stored whole, not
 // refused: nothing projects until the alphabet arrives, and then everything
 // does, with no resend.
+//
+// The hint commands themselves (activate and the rest) are built from the
+// alphabet, so a cold start that sees grammar first registers them only when
+// the alphabet arrives: nothing resends the frame to do it.
 func TestGrammarLettersWaitInThePluginForTheAlphabet(t *testing.T) {
 	h, pushes, _ := newDriftHost(t)
 	h.codewordsMu.Lock()
 	h.codewords = [26]string{}
 	h.codewordsMu.Unlock()
+	h.mu.Lock()
+	h.state.HintCommandSkeletonRegistered = false // a cold start
+	h.mu.Unlock()
+	var pushedGroups []string
+	h.pushCommandGroupRPC = func(group string, cmds []branchkit.CommandSpec) (int, error) {
+		if len(cmds) > 0 {
+			pushedGroups = append(pushedGroups, group)
+		}
+		return len(cmds), nil
+	}
 
 	resp := putFrame(t, h, letterFrame(0, []string{"a b"}, "a b"))
 	if len(resp.Failed) != 0 || resp.CommittedCodewords != 1 {
@@ -311,10 +325,53 @@ func TestGrammarLettersWaitInThePluginForTheAlphabet(t *testing.T) {
 	if len(pushes[hintCollection("browser", "arch")]) != 0 {
 		t.Fatalf("projected with no alphabet: %v", pushes)
 	}
+	if h.state.HintCommandSkeletonRegistered {
+		t.Fatal("the hint commands were claimed with no alphabet to build them from")
+	}
 
 	h.applyAlphabet(alphabetOne)
 	if got := hintEntries(pushes, "arch", true); !mapsEqual(got, setOf("bat")) {
 		t.Errorf("once the alphabet arrives hints_arch_strict = %v, want {bat}", got)
+	}
+	if !h.state.HintCommandSkeletonRegistered || len(pushedGroups) == 0 {
+		t.Errorf("once the alphabet arrives the hint commands must be registered (pushed %v)", pushedGroups)
+	}
+}
+
+// An alphabet change that lands while a grammar request is in flight, after
+// the request began and before its commit, is the one the commit names its
+// prefixes under: the frame's new codewords reach the new words' collections.
+// (The swap is run from inside the request, at the hint-command push that
+// precedes the commit.)
+func TestGrammarCommitFollowsAnAlphabetSwapMidRequest(t *testing.T) {
+	h, pushes, _ := newDriftHost(t)
+	h.applyAlphabet(alphabetOne)
+	putFrame(t, h, letterFrame(0, []string{"a b"}, "a b"))
+
+	h.mu.Lock()
+	h.state.HintCommandSkeletonRegistered = false
+	h.mu.Unlock()
+	swapped := false
+	h.pushCommandGroupRPC = func(string, []branchkit.CommandSpec) (int, error) {
+		if !swapped {
+			swapped = true
+			h.applyAlphabet(alphabetTwo)
+		}
+		return 0, nil
+	}
+	putFrame(t, h, letterFrame(0, []string{"a b", "c d"}, "a b", "c d"))
+	if !swapped {
+		t.Fatal("setup: the swap did not run inside the request")
+	}
+	// alphabetTwo: a=bat b=arch c=drum d=cape.
+	if got := hintEntries(pushes, "drum", true); !mapsEqual(got, setOf("cape")) {
+		t.Errorf("the new codeword c d: hints_drum_strict = %v, want {cape}", got)
+	}
+	if got := hintEntries(pushes, "bat", true); !mapsEqual(got, setOf("arch")) {
+		t.Errorf("hints_bat_strict = %v, want {arch}", got)
+	}
+	if e, _ := pushes[hintCollection("browser", "prefix")]["drum"].(map[string]string); e["letter"] != "c" {
+		t.Errorf("prefix list drum = %v, want letter c", pushes[hintCollection("browser", "prefix")]["drum"])
 	}
 }
 

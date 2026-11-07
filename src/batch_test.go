@@ -121,7 +121,7 @@ func commitFrame(h *Host, key frameKey, elements ...GrammarElement) frameCommit 
 		session: h.ensureFrameSession(key), pluginID: "browser",
 		projConn: key.ConnID, projTab: key.TabID, isFocusedSource: true,
 	}
-	return h.commitGrammarFrame(req, adm, testCodewords)
+	return h.commitGrammarFrame(req, adm)
 }
 
 // A request IS the frame's state: what it omits is gone, and the prefixes the

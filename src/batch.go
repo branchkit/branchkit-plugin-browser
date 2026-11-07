@@ -1134,15 +1134,12 @@ func (h *Host) handleGrammarFramePut(_ *http.Request, reqp *GrammarFrameRequest)
 	}
 
 	h.refreshCodewords()
-	h.codewordsMu.RLock()
-	words := h.codewords
-	h.codewordsMu.RUnlock()
 
 	adm := h.admitGrammarFrame(&req)
 
 	h.ensureSkeleton(adm.pluginID)
 
-	commit := h.commitGrammarFrame(&req, adm, words)
+	commit := h.commitGrammarFrame(&req, adm)
 
 	if !adm.isFocusedSource {
 		return h.respondStoredFrame(&req, adm, commit), nil
@@ -1153,7 +1150,7 @@ func (h *Host) handleGrammarFramePut(_ *http.Request, reqp *GrammarFrameRequest)
 		h.rollbackFailedPrefixes(adm.session, pushFailures, &commit)
 	}
 
-	h.syncTabPrefixList(adm.pluginID, commit, words)
+	h.syncTabPrefixList(adm.pluginID, commit)
 
 	if h.takeHintVocabularyDirty() {
 		// Only when some hint collection's spoken-key set changed — this
@@ -1353,7 +1350,12 @@ func (h *Host) admitGrammarFrame(req *GrammarFrameRequest) frameAdmission {
 // frame's whole state, under one `mu` hold. Whatever the frame held before and
 // does not hold now is simply gone: the prefixes it touched are in
 // affectedPrefixes, so the sync that follows declares them without it.
-func (h *Host) commitGrammarFrame(req *GrammarFrameRequest, adm frameAdmission, words [26]string) frameCommit {
+//
+// The prefixes are named under the alphabet read inside this hold, not one
+// read earlier in the request: an alphabet change that reprojected before
+// this hold is then the one the names follow, and one after it reprojects
+// this commit itself (applyAlphabet waits for mu).
+func (h *Host) commitGrammarFrame(req *GrammarFrameRequest, adm frameAdmission) frameCommit {
 	failed := make([]GrammarFailure, 0)
 	succeeded := make([]string, 0, len(req.Elements))
 	affectedPrefixes := make(map[string]bool, len(req.Elements))
@@ -1361,6 +1363,7 @@ func (h *Host) commitGrammarFrame(req *GrammarFrameRequest, adm frameAdmission, 
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	words := h.currentWords()
 	addPrefixWords(affectedPrefixes, session.Codewords, words)
 	codewords := make(map[string]map[string]string, len(req.Elements))
 	strict := make(map[string]bool)
@@ -1516,7 +1519,7 @@ func (h *Host) rollbackFailedPrefixes(session *FrameSession, pushFailures map[st
 // pattern's `${prefix.codeword}` template binds the dependent
 // collection name to the codeword field; the HUD pulls letter as
 // the subtitle via the secondary role.
-func (h *Host) syncTabPrefixList(pluginID string, commit frameCommit, words [26]string) {
+func (h *Host) syncTabPrefixList(pluginID string, commit frameCommit) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !commit.project {
@@ -1526,6 +1529,8 @@ func (h *Host) syncTabPrefixList(pluginID string, commit frameCommit, words [26]
 	if len(allByPrefix) == 0 && len(commit.affectedPrefixes) == 0 {
 		return
 	}
+	// Subtitles under the alphabet the projection above was built with.
+	words := h.currentWords()
 	prefixData := buildPrefixListData(allByPrefix, words[:])
 	if err := h.syncPrefixList(pluginID, prefixData); err != nil {
 		branchkit.Logf(pluginID, "sync prefix list: %v", err)

@@ -856,7 +856,8 @@ func (h *Host) pushRescanToClients() {
 // nothing then, the EMPTY group pushes successfully, and a claim taken on that
 // push stuck for the plugin's lifetime — a first-run boot race that left no
 // `activate` command at all. Unclaimed, the next caller (every grammar batch
-// calls this) registers it once the alphabet has arrived.
+// calls this) registers it once the alphabet has arrived, and so does the
+// alphabet's own arrival when grammar is already held (applyAlphabet).
 func (h *Host) ensureSkeleton(pluginID string) {
 	h.mu.Lock()
 	if h.state.HintCommandSkeletonRegistered {

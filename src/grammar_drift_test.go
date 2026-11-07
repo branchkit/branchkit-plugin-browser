@@ -150,7 +150,7 @@ func TestLatePublishDoesNotDropAnotherFramesCodewords(t *testing.T) {
 	h, pushes, _ := newDriftHost(t)
 	reqA := frameReq(1, "arch bake")
 	admA := h.admitGrammarFrame(&reqA)
-	commitA := h.commitGrammarFrame(&reqA, admA, testCodewords)
+	commitA := h.commitGrammarFrame(&reqA, admA)
 
 	respB := putFrame(t, h, frameReq(2, "arch check"))
 	if respB.Result != "ok" || len(respB.Failed) != 0 || respB.CommittedCodewords != 1 {
@@ -158,7 +158,7 @@ func TestLatePublishDoesNotDropAnotherFramesCodewords(t *testing.T) {
 	}
 
 	h.syncAffectedPrefixes("browser", commitA)
-	h.syncTabPrefixList("browser", commitA, testCodewords)
+	h.syncTabPrefixList("browser", commitA)
 
 	if got := strictSuffixes(pushes, "arch"); !got["bake"] || !got["check"] {
 		t.Errorf("after A's late publish hints_arch_strict = %v, want bake AND check", got)

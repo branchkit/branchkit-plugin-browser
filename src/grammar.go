@@ -91,7 +91,15 @@ func (h *Host) applyAlphabet(updated [26]string) {
 	dirty := h.state.HintVocabularyDirty
 	h.state.HintVocabularyDirty = false
 	pluginID := h.state.PluginID
+	held := len(h.state.FrameSessions) > 0
 	h.mu.Unlock()
+	if held {
+		// Grammar that arrived before the alphabet (a cold start, the
+		// extension connecting before voice publishes it) found no alphabet
+		// to build the hint commands from, and nothing resends it now that
+		// one is here: register them on the alphabet's arrival instead.
+		h.ensureSkeleton(pluginID)
+	}
 	if dirty {
 		// The prefix and suffix collections now hold the new words: the
 		// recognizer's union must hear them.
