@@ -119,6 +119,13 @@ func (h *Host) applyAlphabet(updated [26]string) {
 // clears every prefix the platform still holds that the new projection does
 // not name.
 //
+// The source's sessions are revived first, as on a focus return. A frame
+// past the stale TTL (an idle iframe holding a page's only hints) still has
+// its old words projected, kept by the empty-source guard, and its badges
+// show the new words: dropping it here would leave those words unmatchable
+// until the page changed. A frame that is really gone ages out again within
+// one sweep, and the guard then keeps this projection.
+//
 // Not during a calibration trial: the fixture owns the collections then and
 // rehydrates itself on a retune (applyHintsFixture); releasing it reprojects.
 // Caller holds mu.
@@ -138,6 +145,7 @@ func (h *Host) reprojectForAlphabetLocked() {
 	if conn == "" || tab == 0 {
 		return
 	}
+	h.reviveTabSessionsLocked(conn, tab)
 	h.reprojectSourceLocked(h.state.PluginID, conn, tab)
 }
 

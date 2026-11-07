@@ -516,3 +516,30 @@ func TestAlphabetArrivingInsideACommandPushDoesNotDeadlock(t *testing.T) {
 		t.Fatal("the hint commands were never registered after the push released pushMu")
 	}
 }
+
+// A page whose hints all live in an iframe that has gone quiet past the stale
+// TTL keeps them projected (the empty-source guard). An alphabet change must
+// move them to the new words too: its badges show the new words, and the
+// content key (letters) is unchanged, so the frame sends nothing.
+func TestAlphabetSwapReprojectsAnIdleIframesHints(t *testing.T) {
+	h, pushes, _ := newDriftHost(t)
+	h.applyAlphabet(alphabetOne)
+	putFrame(t, h, letterFrame(5, []string{"a b"}, "a b"))
+	h.mu.Lock()
+	h.state.FrameSessions[frameKey{ConnID: "chrome", TabID: driftTab, FrameID: 5}].LastBatchAt =
+		time.Now().Add(-2 * staleFrameSessionTTL)
+	h.mu.Unlock()
+	h.sweepStaleFrameSessionsOnce(time.Now())
+	if got := hintEntries(pushes, "arch", true); !mapsEqual(got, setOf("bat")) {
+		t.Fatalf("setup: the idle iframe's hints must stay projected, hints_arch_strict = %v", got)
+	}
+
+	h.applyAlphabet(alphabetTwo)
+	// alphabetTwo: a=bat b=arch.
+	if got := hintEntries(pushes, "bat", true); !mapsEqual(got, setOf("arch")) {
+		t.Errorf("after the swap hints_bat_strict = %v, want {arch}", got)
+	}
+	if got := hintEntries(pushes, "arch", true); len(got) != 0 {
+		t.Errorf("after the swap the old hints_arch_strict still holds %v", got)
+	}
+}
