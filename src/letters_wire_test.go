@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/branchkit/plugin-sdk-go"
 )
@@ -310,6 +311,7 @@ func TestGrammarLettersWaitInThePluginForTheAlphabet(t *testing.T) {
 	h.mu.Lock()
 	h.state.HintCommandSkeletonRegistered = false // a cold start
 	h.mu.Unlock()
+	h.runAsync = func(f func()) { f() }
 	var pushedGroups []string
 	h.pushCommandGroupRPC = func(group string, cmds []branchkit.CommandSpec) (int, error) {
 		if len(cmds) > 0 {
@@ -468,5 +470,49 @@ func TestAlphabetSwapSchedulesVocabularyCommit(t *testing.T) {
 	h.applyAlphabet(alphabetTwo)
 	if !pending() {
 		t.Error("the swap's new words must reach the recognizer: no vocabulary commit was scheduled")
+	}
+}
+
+// The alphabet can arrive inside the startup command push: its hint group
+// refreshes the alphabet mirror while holding pushMu, and the mirror's
+// OnChange runs applyAlphabet on that same goroutine. Registering the hint
+// commands from there must not take pushMu again on it (a self-deadlock that
+// would block every later command push).
+func TestAlphabetArrivingInsideACommandPushDoesNotDeadlock(t *testing.T) {
+	h, _, _ := newDriftHost(t)
+	h.codewordsMu.Lock()
+	h.codewords = [26]string{}
+	h.codewordsMu.Unlock()
+	h.mu.Lock()
+	h.state.HintCommandSkeletonRegistered = false
+	h.mu.Unlock()
+	putFrame(t, h, letterFrame(0, []string{"a b"}, "a b"))
+
+	registered := make(chan struct{}, 1)
+	h.pushCommandGroupRPC = func(group string, cmds []branchkit.CommandSpec) (int, error) {
+		if group == groupHints && len(cmds) > 0 {
+			select {
+			case registered <- struct{}{}:
+			default:
+			}
+		}
+		return len(cmds), nil
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		h.pushMu.Lock() // as pushAllCommandGroups holds it
+		h.applyAlphabet(alphabetOne)
+		h.pushMu.Unlock()
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("applyAlphabet under pushMu did not return: the hint registration re-took pushMu on the same goroutine")
+	}
+	select {
+	case <-registered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the hint commands were never registered after the push released pushMu")
 	}
 }

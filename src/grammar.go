@@ -98,7 +98,11 @@ func (h *Host) applyAlphabet(updated [26]string) {
 		// extension connecting before voice publishes it) found no alphabet
 		// to build the hint commands from, and nothing resends it now that
 		// one is here: register them on the alphabet's arrival instead.
-		h.ensureSkeleton(pluginID)
+		// Off this goroutine: applyAlphabet runs in the alphabet mirror's
+		// OnChange, on whichever goroutine refreshed it, and the startup
+		// command push refreshes it while holding pushMu, which the
+		// registration takes too.
+		h.runAsync(func() { h.ensureSkeleton(pluginID) })
 	}
 	if dirty {
 		// The prefix and suffix collections now hold the new words: the
